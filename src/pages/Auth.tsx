@@ -171,18 +171,18 @@ const Auth = () => {
       // Combine country code with phone
       const fullPhone = `${values.countryCode}${values.phone}`;
 
-      // Check existence
-      const isUserTaken = AuthService.checkExists("username", values.username);
+      // Check existence (now async with Supabase)
+      const isUserTaken = await AuthService.checkExists("username", values.username);
       if (isUserTaken) {
         toast.error("Tài khoản đã tồn tại (Username bị trùng). Vui lòng đăng nhập.");
         return;
       }
-      const isPhoneTaken = AuthService.checkExists("phone", fullPhone);
+      const isPhoneTaken = await AuthService.checkExists("phone", fullPhone);
       if (isPhoneTaken) {
         toast.error("Số điện thoại đã được đăng ký. Vui lòng đăng nhập.");
         return;
       }
-      const isEmailTaken = AuthService.checkExists("email", values.email);
+      const isEmailTaken = await AuthService.checkExists("email", values.email);
       if (isEmailTaken) {
         toast.error("Email đã được sử dụng.");
         return;
@@ -203,6 +203,7 @@ const Auth = () => {
       setIsLoading(false);
     }
   };
+
 
 
   const onRegisterOtpVerify = async () => {
