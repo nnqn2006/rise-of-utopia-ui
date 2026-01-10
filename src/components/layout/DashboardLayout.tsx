@@ -22,7 +22,7 @@ export function DashboardLayout({ children, mode }: DashboardLayoutProps) {
               Mạng: Testnet
             </div>
           </header>
-          <div className="flex-1 p-6 overflow-auto">
+          <div className="flex-1 p-6 overflow-y-auto overflow-x-hidden">
             {children}
           </div>
         </main>
