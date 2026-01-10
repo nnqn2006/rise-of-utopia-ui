@@ -26,6 +26,14 @@ const pools = [
     pair: "VEG/USDG",
     tvl: "45,000",
     apy: "55.8%",
+    userLp: "320.00",
+    stakedLp: "200.00",
+    simEarned: "45.3",
+  },
+  {
+    pair: "GRAIN/USDG",
+    tvl: "67,000",
+    apy: "48.5%",
     userLp: "0.00",
     stakedLp: "0.00",
     simEarned: "0.00",
@@ -49,7 +57,7 @@ const FarmerLiquidity = () => {
             <div>
               <p className="font-medium text-warning">Cảnh báo tổn thất tạm thời (Impermanent Loss)</p>
               <p className="text-sm text-muted-foreground mt-1">
-                Khi cung cấp thanh khoản, giá trị tài sản có thể biến động so với việc giữ nguyên. 
+                Khi cung cấp thanh khoản, giá trị tài sản có thể biến động so với việc giữ nguyên.
                 Tìm hiểu kỹ trước khi tham gia.
               </p>
             </div>
