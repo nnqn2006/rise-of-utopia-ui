@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -87,7 +87,7 @@ const registerSchema = z
       .min(6, "Mật khẩu phải có tối thiểu 6 ký tự")
       .regex(/^[a-zA-Z0-9]+$/, "Mật khẩu không được chứa ký tự đặc biệt"),
     confirmPassword: z.string(),
-    role: z.enum(["farmer", "trader"]),
+    roles: z.array(z.enum(["farmer", "trader"])).min(1, "Vui lòng chọn ít nhất một vai trò"),
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: "Mật khẩu xác nhận không khớp",
@@ -135,7 +135,7 @@ const Auth = () => {
   const registerForm = useForm<z.infer<typeof registerSchema>>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
-      role: "farmer",
+      roles: [],
       fullname: "",
       username: "",
       email: "",
@@ -222,15 +222,16 @@ const Auth = () => {
         email: tempRegData.email,
         phone: tempRegData.phone,
         password: tempRegData.password,
-        role: tempRegData.role,
+        roles: tempRegData.roles,
       };
       await AuthService.register(dataToSave);
 
       toast.success("Đăng ký thành công! Đang chuyển hướng...");
 
-      // Navigate
+      // Navigate to the first selected role's dashboard
       setTimeout(() => {
-        navigate(tempRegData.role === "farmer" ? "/farmer/dashboard" : "/trader/dashboard");
+        const firstRole = tempRegData.roles[0];
+        navigate(firstRole === "farmer" ? "/farmer/dashboard" : "/trader/dashboard");
       }, 1000);
 
     } catch (error) {
@@ -248,7 +249,8 @@ const Auth = () => {
       const res = await AuthService.login(values.identifier, values.password);
       if (res.success && res.user) {
         toast.success(res.message);
-        navigate(res.user.role === "farmer" ? "/farmer/dashboard" : "/trader/dashboard");
+        const firstRole = res.user.roles?.[0] || "farmer";
+        navigate(firstRole === "farmer" ? "/farmer/dashboard" : "/trader/dashboard");
       } else {
         toast.error(res.message);
       }
@@ -484,44 +486,65 @@ const Auth = () => {
 
                       <FormField
                         control={registerForm.control}
-                        name="role"
+                        name="roles"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Chọn vai trò</FormLabel>
+                            <FormLabel>Chọn vai trò <span className="text-muted-foreground text-xs">(có thể chọn nhiều)</span></FormLabel>
                             <FormControl>
-                              <RadioGroup
-                                onValueChange={field.onChange}
-                                defaultValue={field.value}
-                                className="grid grid-cols-2 gap-4"
-                              >
-                                <FormItem>
-                                  <FormLabel className="[&:has([data-state=checked])>div]:border-primary [&:has([data-state=checked])>div]:bg-primary/10">
-                                    <FormControl>
-                                      <RadioGroupItem value="farmer" className="sr-only" />
-                                    </FormControl>
-                                    <div className="flex flex-col items-center gap-2 p-4 rounded-xl border cursor-pointer transition-all border-border hover:border-muted-foreground">
-                                      <div className="w-10 h-10 rounded-lg bg-success/20 flex items-center justify-center">
-                                        <Sprout className="w-5 h-5 text-success" />
+                              <div className="grid grid-cols-2 gap-4">
+                                {/* Farmer Role */}
+                                <div
+                                  onClick={() => {
+                                    const current = field.value || [];
+                                    if (current.includes("farmer")) {
+                                      field.onChange(current.filter((r: string) => r !== "farmer"));
+                                    } else {
+                                      field.onChange([...current, "farmer"]);
+                                    }
+                                  }}
+                                  className={`flex flex-col items-center gap-2 p-4 rounded-xl border cursor-pointer transition-all ${field.value?.includes("farmer")
+                                      ? "border-primary bg-primary/10"
+                                      : "border-border hover:border-muted-foreground"
+                                    }`}
+                                >
+                                  <div className="w-10 h-10 rounded-lg bg-success/20 flex items-center justify-center relative">
+                                    <Sprout className="w-5 h-5 text-success" />
+                                    {field.value?.includes("farmer") && (
+                                      <div className="absolute -top-1 -right-1 w-4 h-4 bg-primary rounded-full flex items-center justify-center">
+                                        <span className="text-[10px] text-primary-foreground">✓</span>
                                       </div>
-                                      <span className="font-semibold text-foreground">Nông dân</span>
-                                    </div>
-                                  </FormLabel>
-                                </FormItem>
-                                <FormItem>
-                                  <FormLabel className="[&:has([data-state=checked])>div]:border-primary [&:has([data-state=checked])>div]:bg-primary/10">
-                                    <FormControl>
-                                      <RadioGroupItem value="trader" className="sr-only" />
-                                    </FormControl>
-                                    <div className="flex flex-col items-center gap-2 p-4 rounded-xl border cursor-pointer transition-all border-border hover:border-muted-foreground">
-                                      <div className="w-10 h-10 rounded-lg bg-secondary/20 flex items-center justify-center">
-                                        <TrendingUp className="w-5 h-5 text-secondary" />
+                                    )}
+                                  </div>
+                                  <span className="font-semibold text-foreground">Nông dân</span>
+                                </div>
+                                {/* Trader Role */}
+                                <div
+                                  onClick={() => {
+                                    const current = field.value || [];
+                                    if (current.includes("trader")) {
+                                      field.onChange(current.filter((r: string) => r !== "trader"));
+                                    } else {
+                                      field.onChange([...current, "trader"]);
+                                    }
+                                  }}
+                                  className={`flex flex-col items-center gap-2 p-4 rounded-xl border cursor-pointer transition-all ${field.value?.includes("trader")
+                                      ? "border-primary bg-primary/10"
+                                      : "border-border hover:border-muted-foreground"
+                                    }`}
+                                >
+                                  <div className="w-10 h-10 rounded-lg bg-secondary/20 flex items-center justify-center relative">
+                                    <TrendingUp className="w-5 h-5 text-secondary" />
+                                    {field.value?.includes("trader") && (
+                                      <div className="absolute -top-1 -right-1 w-4 h-4 bg-primary rounded-full flex items-center justify-center">
+                                        <span className="text-[10px] text-primary-foreground">✓</span>
                                       </div>
-                                      <span className="font-semibold text-foreground">Thương nhân</span>
-                                    </div>
-                                  </FormLabel>
-                                </FormItem>
-                              </RadioGroup>
+                                    )}
+                                  </div>
+                                  <span className="font-semibold text-foreground">Thương nhân</span>
+                                </div>
+                              </div>
                             </FormControl>
+                            <FormMessage />
                           </FormItem>
                         )}
                       />

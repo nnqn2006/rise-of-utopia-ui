@@ -1,11 +1,18 @@
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Sprout, TrendingUp } from "lucide-react";
+import { AuthService } from "@/services/auth.service";
 
 export function ModeToggle() {
   const navigate = useNavigate();
   const location = useLocation();
   const isFarmer = location.pathname.startsWith("/farmer");
+
+  // Only show toggle if user has both roles
+  const hasBothRoles = AuthService.hasBothRoles();
+  if (!hasBothRoles) {
+    return null;
+  }
 
   const handleToggle = () => {
     const currentPage = location.pathname.split("/").pop() || "dashboard";
@@ -40,3 +47,4 @@ export function ModeToggle() {
     </Button>
   );
 }
+

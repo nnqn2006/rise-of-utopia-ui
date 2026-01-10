@@ -7,13 +7,26 @@ export interface User {
     email: string;
     phone: string;
     password: string;
-    role: "farmer" | "trader";
+    roles: ("farmer" | "trader")[];
+    avatar?: string;
     created_at?: string;
 }
 
 const CURRENT_USER_KEY = "utopia_current_user";
 
 export const AuthService = {
+    // Check if current user has a specific role
+    hasRole: (role: "farmer" | "trader"): boolean => {
+        const user = AuthService.getCurrentUser();
+        return user?.roles?.includes(role) ?? false;
+    },
+
+    // Check if current user has both roles
+    hasBothRoles: (): boolean => {
+        const user = AuthService.getCurrentUser();
+        return user?.roles?.includes("farmer") && user?.roles?.includes("trader") || false;
+    },
+
     // Check if user exists by field
     checkExists: async (field: keyof User, value: string): Promise<boolean> => {
         const { data, error } = await supabase
@@ -124,6 +137,70 @@ export const AuthService = {
             return { success: true, message: "Đặt lại mật khẩu thành công" };
         } catch (error) {
             console.error("Reset password error:", error);
+            return { success: false, message: "Có lỗi xảy ra" };
+        }
+    },
+
+    // Update username
+    updateUsername: async (newUsername: string): Promise<{ success: boolean; message: string }> => {
+        try {
+            const user = AuthService.getCurrentUser();
+            if (!user) {
+                return { success: false, message: "Chưa đăng nhập" };
+            }
+
+            // Check if username already exists
+            const exists = await AuthService.checkExists("username", newUsername);
+            if (exists && newUsername !== user.username) {
+                return { success: false, message: "Username đã tồn tại" };
+            }
+
+            const { data, error } = await supabase
+                .from("users")
+                .update({ username: newUsername })
+                .eq("id", user.id)
+                .select()
+                .single();
+
+            if (error || !data) {
+                return { success: false, message: "Lỗi cập nhật username" };
+            }
+
+            // Update local storage
+            localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(data));
+
+            return { success: true, message: "Cập nhật username thành công" };
+        } catch (error) {
+            console.error("Update username error:", error);
+            return { success: false, message: "Có lỗi xảy ra" };
+        }
+    },
+
+    // Update avatar
+    updateAvatar: async (avatarData: string): Promise<{ success: boolean; message: string }> => {
+        try {
+            const user = AuthService.getCurrentUser();
+            if (!user) {
+                return { success: false, message: "Chưa đăng nhập" };
+            }
+
+            const { data, error } = await supabase
+                .from("users")
+                .update({ avatar: avatarData })
+                .eq("id", user.id)
+                .select()
+                .single();
+
+            if (error || !data) {
+                return { success: false, message: "Lỗi cập nhật avatar" };
+            }
+
+            // Update local storage
+            localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(data));
+
+            return { success: true, message: "Cập nhật avatar thành công" };
+        } catch (error) {
+            console.error("Update avatar error:", error);
             return { success: false, message: "Có lỗi xảy ra" };
         }
     }
