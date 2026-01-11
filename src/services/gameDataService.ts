@@ -14,6 +14,26 @@ const getDefaultDemoData = () => ({
         xp: 2250,
         total_profit_loss: 250,
     },
+    trader_data: {
+        token_balances: {
+            GAO: { amount: 150, cost_basis: 3.2 },
+            FRUIT: { amount: 80, cost_basis: 4.1 },
+            VEG: { amount: 120, cost_basis: 2.3 },
+            GRAIN: { amount: 200, cost_basis: 1.9 },
+        },
+        total_trades: 47,
+        total_volume: 12500,
+        win_rate: 65.5,
+        best_trade: { token: 'GAO', profit: 125, date: new Date(Date.now() - 86400000).toISOString() },
+        worst_trade: { token: 'VEG', profit: -35, date: new Date(Date.now() - 172800000).toISOString() },
+    },
+    swap_history: [
+        { from_token: 'USDG', to_token: 'GAO', from_amount: 100, to_amount: 28.5, profit_loss: 15, created_at: new Date().toISOString() },
+        { from_token: 'GAO', to_token: 'USDG', from_amount: 15, to_amount: 58, profit_loss: 8, created_at: new Date(Date.now() - 1800000).toISOString() },
+        { from_token: 'USDG', to_token: 'FRUIT', from_amount: 80, to_amount: 18.5, profit_loss: 5, created_at: new Date(Date.now() - 3600000).toISOString() },
+        { from_token: 'FRUIT', to_token: 'USDG', from_amount: 10, to_amount: 45, profit_loss: 3, created_at: new Date(Date.now() - 7200000).toISOString() },
+        { from_token: 'USDG', to_token: 'VEG', from_amount: 50, to_amount: 22, profit_loss: -5, created_at: new Date(Date.now() - 10800000).toISOString() },
+    ],
     farmer_data: {
         seed_warehouse: { GAO: 10, FRUIT: 5, VEG: 8, GRAIN: 12 },
         harvest_warehouse: {
@@ -209,6 +229,12 @@ export async function updateUSDGBalance(newBalance: number): Promise<boolean> {
 // =====================================================
 
 export async function getTraderData(): Promise<TraderData | null> {
+    // DEMO MODE: Use localStorage
+    if (DEMO_MODE) {
+        const demoData = getDemoData();
+        return demoData.trader_data as unknown as TraderData;
+    }
+
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
 
@@ -227,6 +253,15 @@ export async function getTraderData(): Promise<TraderData | null> {
 }
 
 export async function updateTraderData(updates: Partial<TraderData>): Promise<boolean> {
+    // DEMO MODE: Use localStorage
+    if (DEMO_MODE) {
+        const demoData = getDemoData();
+        demoData.trader_data = { ...demoData.trader_data, ...updates };
+        saveDemoData(demoData);
+        console.log('DEMO: updateTraderData saved:', updates);
+        return true;
+    }
+
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return false;
 
@@ -251,6 +286,23 @@ export async function recordSwap(
     slippage: number,
     profitLoss: number
 ): Promise<boolean> {
+    // DEMO MODE: Use localStorage
+    if (DEMO_MODE) {
+        const demoData = getDemoData();
+        demoData.swap_history.unshift({
+            from_token: fromToken,
+            to_token: toToken,
+            from_amount: fromAmount,
+            to_amount: toAmount,
+            profit_loss: profitLoss,
+            created_at: new Date().toISOString(),
+        });
+        demoData.swap_history = demoData.swap_history.slice(0, 20);
+        saveDemoData(demoData);
+        console.log('DEMO: recordSwap:', fromToken, '->', toToken);
+        return true;
+    }
+
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return false;
 
@@ -275,6 +327,12 @@ export async function recordSwap(
 }
 
 export async function getSwapHistory(limit = 50) {
+    // DEMO MODE: Use localStorage
+    if (DEMO_MODE) {
+        const demoData = getDemoData();
+        return demoData.swap_history.slice(0, limit);
+    }
+
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return [];
 
