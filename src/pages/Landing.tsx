@@ -35,8 +35,8 @@ const Landing = () => {
       {/* Header */}
       <header className="p-6 flex justify-between items-center">
         <div className="flex items-center gap-3">
-          <img src="/logo-mascot.png" alt="Rise of Ledger" className="w-10 h-10 rounded-xl object-cover" />
-          <span className="text-xl font-bold gradient-text">Rise of Ledger</span>
+          <img src="/logo-mascot.png" alt="Utopia World" className="w-10 h-10 rounded-xl object-cover" />
+          <span className="text-xl font-bold bg-gradient-to-r from-yellow-400 via-orange-500 to-green-500 bg-clip-text text-transparent">Utopia World</span>
         </div>
       </header>
 
@@ -47,13 +47,11 @@ const Landing = () => {
           <div className="mb-8">
             <img
               src="/logo-mascot.png"
-              alt="Rise of Ledger Utopia"
+              alt="Utopia World"
               className="w-48 h-48 mx-auto mb-6 rounded-2xl object-cover shadow-2xl"
             />
             <h1 className="text-5xl md:text-6xl font-bold mb-4">
-              <span className="gradient-text">Rise of Ledger</span>
-              <br />
-              <span className="text-foreground">Utopia</span>
+              <span className="bg-gradient-to-r from-yellow-400 via-orange-500 to-green-500 bg-clip-text text-transparent">Utopia World</span>
             </h1>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
               Trải nghiệm thế giới GameFi – nơi nông nghiệp truyền thống được tái định hình bởi tài chính phi tập trung.
