@@ -56,8 +56,7 @@ const Landing = () => {
               <span className="text-foreground">Utopia</span>
             </h1>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Trải nghiệm thế giới GameFi nơi nông nghiệp gặp gỡ tài chính phi tập trung.
-              Trồng trọt, giao dịch và xây dựng đế chế của riêng bạn.
+              Trải nghiệm thế giới GameFi – nơi nông nghiệp truyền thống được tái định hình bởi tài chính phi tập trung.
             </p>
           </div>
 
