@@ -114,21 +114,24 @@ const TraderPortfolio = () => {
     const performanceKPIs = useMemo(() => {
         if (!traderData || !assets) return [];
 
-        const profitSwaps = swapHistory.filter(s => s.profit_loss > 0).length;
+        const profitSwaps = swapHistory.filter(s => (s.profit_loss || 0) > 0).length;
         const winRate = swapHistory.length > 0 ? (profitSwaps / swapHistory.length) * 100 : 0;
         const avgSlippage = swapHistory.length > 0
-            ? swapHistory.reduce((acc, s) => acc + s.slippage, 0) / swapHistory.length
+            ? swapHistory.reduce((acc, s) => acc + (s.slippage || 0), 0) / swapHistory.length
             : 0;
+        const totalProfitLoss = traderData.total_profit_loss || 0;
+        const totalTrades = traderData.total_trades || 0;
+        const totalVolume = traderData.total_volume || 0;
         const roi = assets.usdg_balance > 0
-            ? (traderData.total_profit_loss / 100) * 100
+            ? (totalProfitLoss / 100) * 100
             : 0;
 
         return [
-            { label: "Tổng số giao dịch", value: traderData.total_trades.toString(), sub: "trades", icon: Activity, color: "primary" },
-            { label: "Tổng Volume", value: `$${traderData.total_volume.toFixed(2)}`, sub: "USDG", icon: Wallet, color: "blue" },
+            { label: "Tổng số giao dịch", value: totalTrades.toString(), sub: "trades", icon: Activity, color: "primary" },
+            { label: "Tổng Volume", value: `$${totalVolume.toFixed(2)}`, sub: "USDG", icon: Wallet, color: "blue" },
             { label: "Tỷ lệ thắng (Win Rate)", value: `${winRate.toFixed(1)}%`, sub: `${profitSwaps}/${swapHistory.length} swaps`, icon: Zap, color: "success", status: winRate > 50 ? "good" : "warning" },
             { label: "Slippage trung bình", value: `${avgSlippage.toFixed(2)}%`, sub: avgSlippage < 0.5 ? "Thấp" : "Trung bình", icon: TrendingDown, color: "warning", status: avgSlippage < 1 ? "good" : "warning" },
-            { label: "Tổng P/L", value: `${traderData.total_profit_loss >= 0 ? '+' : ''}$${traderData.total_profit_loss.toFixed(2)}`, sub: "Lợi nhuận ròng", icon: TrendingUp, color: traderData.total_profit_loss >= 0 ? "success" : "destructive", status: traderData.total_profit_loss >= 0 ? "good" : "warning" },
+            { label: "Tổng P/L", value: `${totalProfitLoss >= 0 ? '+' : ''}$${totalProfitLoss.toFixed(2)}`, sub: "Lợi nhuận ròng", icon: TrendingUp, color: totalProfitLoss >= 0 ? "success" : "destructive", status: totalProfitLoss >= 0 ? "good" : "warning" },
             { label: "ROI tổng", value: `${roi >= 0 ? '+' : ''}${roi.toFixed(1)}%`, sub: "Trên vốn gốc", icon: BarChart3, color: "primary", status: roi >= 0 ? "good" : "warning" },
         ];
     }, [traderData, assets, swapHistory]);
