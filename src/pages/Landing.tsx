@@ -61,7 +61,7 @@ const Landing = () => {
           </div>
 
           {/* Feature Cards */}
-          <div className="grid md:grid-cols-3 gap-4 mb-12">
+          <div className="grid md:grid-cols-3 gap-4 mb-8">
             {features.map((feature, index) => (
               <Card key={index} className="glass-card hover:border-primary/50 transition-colors">
                 <CardContent className="p-6 text-center">
@@ -73,6 +73,61 @@ const Landing = () => {
                 </CardContent>
               </Card>
             ))}
+          </div>
+
+          {/* Role Cards */}
+          <div className="grid md:grid-cols-2 gap-6 mb-12 max-w-4xl mx-auto">
+            {/* Farmer Card */}
+            <Card className="glass-card border-2 border-green-500/30 hover:border-green-500/50 transition-colors bg-gradient-to-br from-green-500/5 to-transparent">
+              <CardContent className="p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 rounded-xl bg-green-500/20 flex items-center justify-center">
+                    <span className="text-2xl">🌾</span>
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-green-400">Farmer</h3>
+                    <p className="text-sm text-muted-foreground">Người sản xuất và cung cấp thanh khoản</p>
+                  </div>
+                </div>
+                <ul className="space-y-2 text-sm text-muted-foreground">
+                  <li className="flex items-center gap-2">
+                    <span className="text-green-400">✓</span> Trồng trọt & sản xuất
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="text-green-400">✓</span> Đưa sản phẩm vào pool (stake/farm)
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="text-green-400">✓</span> Theo dõi thị trường & cân bằng pool
+                  </li>
+                </ul>
+              </CardContent>
+            </Card>
+
+            {/* Trader Card */}
+            <Card className="glass-card border-2 border-blue-500/30 hover:border-blue-500/50 transition-colors bg-gradient-to-br from-blue-500/5 to-transparent">
+              <CardContent className="p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 rounded-xl bg-blue-500/20 flex items-center justify-center">
+                    <span className="text-2xl">📊</span>
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-blue-400">Trader</h3>
+                    <p className="text-sm text-muted-foreground">Người phân tích và giao dịch thị trường</p>
+                  </div>
+                </div>
+                <ul className="space-y-2 text-sm text-muted-foreground">
+                  <li className="flex items-center gap-2">
+                    <span className="text-blue-400">✓</span> Phân tích tín hiệu thị trường
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="text-blue-400">✓</span> Swap token theo nhu cầu
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="text-blue-400">✓</span> Quản lý rủi ro & tối ưu lợi nhuận
+                  </li>
+                </ul>
+              </CardContent>
+            </Card>
           </div>
 
           {/* Starter Assets */}
