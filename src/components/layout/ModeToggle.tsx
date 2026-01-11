@@ -8,11 +8,19 @@ export function ModeToggle() {
   const location = useLocation();
   const isFarmer = location.pathname.startsWith("/farmer");
 
-  // Only show toggle if user has both roles
+  // Debug: Log current user roles
+  const user = AuthService.getCurrentUser();
+  console.log('ModeToggle - Current user:', user);
+  console.log('ModeToggle - User roles:', user?.roles);
+
+  // Show toggle for users with both roles (or always show for debugging)
   const hasBothRoles = AuthService.hasBothRoles();
-  if (!hasBothRoles) {
-    return null;
-  }
+  console.log('ModeToggle - hasBothRoles:', hasBothRoles);
+
+  // Temporarily always show for debugging - remove this condition later
+  // if (!hasBothRoles) {
+  //   return null;
+  // }
 
   const handleToggle = () => {
     const currentPage = location.pathname.split("/").pop() || "dashboard";

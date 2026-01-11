@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
@@ -21,7 +21,16 @@ import {
   Leaf,
   Check,
   X,
+  Loader2,
 } from "lucide-react";
+import {
+  getUserAssets,
+  getFarmerData,
+  updateFarmerData,
+  updateUserAssets,
+  recordFarmerActivity,
+  type FarmPlot as FarmPlotType,
+} from "@/services/gameDataService";
 
 // Token data with harvest time and price
 const tokenSeeds = [
@@ -76,8 +85,11 @@ interface HarvestWarehouse {
 }
 
 const FarmerFarm = () => {
+  // Loading state
+  const [isLoading, setIsLoading] = useState(true);
+
   // User balance
-  const [usdgBalance, setUsdgBalance] = useState(500);
+  const [usdgBalance, setUsdgBalance] = useState(100);
 
   // Seed shop dialog
   const [isShopOpen, setIsShopOpen] = useState(false);
@@ -90,41 +102,109 @@ const FarmerFarm = () => {
   const [selectedPlot, setSelectedPlot] = useState<number | null>(null);
 
   // Warehouses
-  const [seedWarehouse, setSeedWarehouse] = useState<SeedWarehouse>(() => {
-    const saved = localStorage.getItem("seedWarehouse");
-    return saved ? JSON.parse(saved) : { GAO: 5, FRUIT: 3, VEG: 2, GRAIN: 4 };
-  });
-
-  const [harvestWarehouse, setHarvestWarehouse] = useState<HarvestWarehouse>(() => {
-    const saved = localStorage.getItem("harvestWarehouse");
-    return saved ? JSON.parse(saved) : {};
-  });
+  const [seedWarehouse, setSeedWarehouse] = useState<SeedWarehouse>({ GAO: 0, FRUIT: 0, VEG: 0, GRAIN: 0 });
+  const [harvestWarehouse, setHarvestWarehouse] = useState<HarvestWarehouse>({});
 
   // Farm plots (12 cells)
-  const [farmPlots, setFarmPlots] = useState<FarmPlot[]>(() => {
-    const saved = localStorage.getItem("farmPlots");
-    if (saved) return JSON.parse(saved);
-    return Array.from({ length: 12 }, (_, i) => ({
+  const [farmPlots, setFarmPlots] = useState<FarmPlot[]>(
+    Array.from({ length: 12 }, (_, i) => ({
       id: i + 1,
       status: "empty" as const,
       seedType: null,
       plantedAt: null,
       harvestTime: 0,
-    }));
-  });
+    }))
+  );
 
-  // Save to localStorage
+  // Load data from Supabase on mount
   useEffect(() => {
-    localStorage.setItem("seedWarehouse", JSON.stringify(seedWarehouse));
-  }, [seedWarehouse]);
+    const loadData = async () => {
+      try {
+        const [assets, farmerData] = await Promise.all([
+          getUserAssets(),
+          getFarmerData()
+        ]);
 
-  useEffect(() => {
-    localStorage.setItem("harvestWarehouse", JSON.stringify(harvestWarehouse));
-  }, [harvestWarehouse]);
+        if (assets) {
+          setUsdgBalance(assets.usdg_balance);
+        }
 
-  useEffect(() => {
-    localStorage.setItem("farmPlots", JSON.stringify(farmPlots));
-  }, [farmPlots]);
+        if (farmerData) {
+          setSeedWarehouse(farmerData.seed_warehouse);
+
+          // Convert harvest_warehouse format
+          const convertedHarvest: HarvestWarehouse = {};
+          Object.entries(farmerData.harvest_warehouse).forEach(([key, val]) => {
+            convertedHarvest[key] = { amount: val.amount, costBasis: val.cost_basis };
+          });
+          setHarvestWarehouse(convertedHarvest);
+
+          // Convert farm_plots format (snake_case to camelCase)
+          const convertedPlots: FarmPlot[] = farmerData.farm_plots.map((plot: FarmPlotType) => ({
+            id: plot.id,
+            status: plot.status,
+            seedType: plot.seed_type,
+            plantedAt: plot.planted_at ? new Date(plot.planted_at).getTime() : null,
+            harvestTime: plot.harvest_time,
+          }));
+          setFarmPlots(convertedPlots);
+        }
+      } catch (error) {
+        console.error('Error loading farm data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadData();
+  }, []);
+
+  // Save to Supabase helper
+  const saveToSupabase = useCallback(async (
+    newSeedWarehouse?: SeedWarehouse,
+    newHarvestWarehouse?: HarvestWarehouse,
+    newFarmPlots?: FarmPlot[],
+    newBalance?: number
+  ) => {
+    try {
+      // Save farmer data
+      const updates: Record<string, unknown> = {};
+
+      if (newSeedWarehouse) {
+        updates.seed_warehouse = newSeedWarehouse;
+      }
+
+      if (newHarvestWarehouse) {
+        const converted: Record<string, { amount: number; cost_basis: number }> = {};
+        Object.entries(newHarvestWarehouse).forEach(([key, val]) => {
+          converted[key] = { amount: val.amount, cost_basis: val.costBasis };
+        });
+        updates.harvest_warehouse = converted;
+      }
+
+      if (newFarmPlots) {
+        // Convert to snake_case for database
+        updates.farm_plots = newFarmPlots.map(plot => ({
+          id: plot.id,
+          status: plot.status,
+          seed_type: plot.seedType,
+          planted_at: plot.plantedAt ? new Date(plot.plantedAt).toISOString() : null,
+          harvest_time: plot.harvestTime,
+        }));
+      }
+
+      if (Object.keys(updates).length > 0) {
+        await updateFarmerData(updates as never);
+      }
+
+      // Save balance
+      if (newBalance !== undefined) {
+        await updateUserAssets({ usdg_balance: newBalance });
+      }
+    } catch (error) {
+      console.error('Error saving to Supabase:', error);
+    }
+  }, []);
 
   // Update growing plots every second
   useEffect(() => {
@@ -145,75 +225,94 @@ const FarmerFarm = () => {
   }, []);
 
   // Buy seeds
-  const handleBuySeed = () => {
+  const handleBuySeed = async () => {
     if (!selectedSeed) return;
     const totalCost = selectedSeed.price * buyQuantity;
     if (totalCost > usdgBalance) return;
 
-    setUsdgBalance((prev) => prev - totalCost);
-    setSeedWarehouse((prev) => ({
-      ...prev,
-      [selectedSeed.symbol]: (prev[selectedSeed.symbol] || 0) + buyQuantity,
-    }));
+    const newBalance = usdgBalance - totalCost;
+    const newSeeds = {
+      ...seedWarehouse,
+      [selectedSeed.symbol]: (seedWarehouse[selectedSeed.symbol] || 0) + buyQuantity,
+    };
+
+    setUsdgBalance(newBalance);
+    setSeedWarehouse(newSeeds);
     setBuyDialogOpen(false);
     setBuyQuantity(1);
+
+    // Save to Supabase
+    await saveToSupabase(newSeeds, undefined, undefined, newBalance);
+    await recordFarmerActivity('buy_seed', selectedSeed.symbol, buyQuantity, { price: totalCost });
   };
 
   // Plant seed
-  const handlePlantSeed = (seedSymbol: string) => {
+  const handlePlantSeed = async (seedSymbol: string) => {
     if (selectedPlot === null) return;
     if (!seedWarehouse[seedSymbol] || seedWarehouse[seedSymbol] <= 0) return;
 
     const seedData = tokenSeeds.find((s) => s.symbol === seedSymbol);
     if (!seedData) return;
 
-    setSeedWarehouse((prev) => ({
-      ...prev,
-      [seedSymbol]: prev[seedSymbol] - 1,
-    }));
+    const newSeeds = {
+      ...seedWarehouse,
+      [seedSymbol]: seedWarehouse[seedSymbol] - 1,
+    };
 
-    setFarmPlots((plots) =>
-      plots.map((plot) =>
-        plot.id === selectedPlot
-          ? {
-            ...plot,
-            status: "growing" as const,
-            seedType: seedSymbol,
-            plantedAt: Date.now(),
-            harvestTime: seedData.harvestTime,
-          }
-          : plot
-      )
+    const newPlots = farmPlots.map((plot) =>
+      plot.id === selectedPlot
+        ? {
+          ...plot,
+          status: "growing" as const,
+          seedType: seedSymbol,
+          plantedAt: Date.now(),
+          harvestTime: seedData.harvestTime,
+        }
+        : plot
     );
+
+    setSeedWarehouse(newSeeds);
+    setFarmPlots(newPlots);
     setPlantDialogOpen(false);
     setSelectedPlot(null);
+
+    // Save to Supabase
+    await saveToSupabase(newSeeds, undefined, newPlots);
+    await recordFarmerActivity('plant', seedSymbol, 1, { plot_id: selectedPlot });
   };
 
   // Harvest
-  const handleHarvest = (plotId: number) => {
+  const handleHarvest = async (plotId: number) => {
     const plot = farmPlots.find((p) => p.id === plotId);
     if (!plot || plot.status !== "ready" || !plot.seedType) return;
 
     const seedData = tokenSeeds.find((s) => s.symbol === plot.seedType);
     if (!seedData) return;
 
+    const seedType = plot.seedType;
+
     // Add to harvest warehouse
-    setHarvestWarehouse((prev) => ({
-      ...prev,
-      [plot.seedType!]: {
-        amount: (prev[plot.seedType!]?.amount || 0) + 1,
-        costBasis: (prev[plot.seedType!]?.costBasis || 0) + seedData.price,
+    const newHarvest = {
+      ...harvestWarehouse,
+      [seedType]: {
+        amount: (harvestWarehouse[seedType]?.amount || 0) + 1,
+        costBasis: (harvestWarehouse[seedType]?.costBasis || 0) + seedData.price,
       },
-    }));
+    };
 
     // Reset plot
-    setFarmPlots((plots) =>
-      plots.map((p) =>
-        p.id === plotId
-          ? { ...p, status: "empty" as const, seedType: null, plantedAt: null, harvestTime: 0 }
-          : p
-      )
+    const newPlots = farmPlots.map((p) =>
+      p.id === plotId
+        ? { ...p, status: "empty" as const, seedType: null, plantedAt: null, harvestTime: 0 }
+        : p
     );
+
+    setHarvestWarehouse(newHarvest);
+    setFarmPlots(newPlots);
+
+    // Save to Supabase
+    await saveToSupabase(undefined, newHarvest, newPlots);
+    await recordFarmerActivity('harvest', seedType, 1, { plot_id: plotId });
   };
 
   // Get remaining time for growing plot

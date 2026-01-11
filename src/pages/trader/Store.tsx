@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Card,
   CardContent,
@@ -20,7 +20,8 @@ import {
   History,
   TrendingUp as DemandIcon,
   ChevronRight,
-  MoreVertical
+  MoreVertical,
+  Loader2
 } from "lucide-react";
 import {
   Table,
@@ -58,6 +59,27 @@ import {
 } from "recharts";
 import { useNavigate } from "react-router-dom";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  getTraderData,
+  getSwapHistory,
+  type TraderData,
+} from "@/services/gameDataService";
+
+// Token metadata
+const tokenMetadata: Record<string, { name: string; image: string; color: string }> = {
+  GAO: { name: "Gạo Token", image: "/tokens/gao_new.png", color: "#8b5cf6" },
+  FRUIT: { name: "Trái cây Token", image: "/tokens/fruit.png", color: "#ef4444" },
+  VEG: { name: "Rau củ Token", image: "/tokens/veg.png", color: "#22c55e" },
+  GRAIN: { name: "Ngũ cốc Token", image: "/tokens/grain.png", color: "#f59e0b" },
+};
+
+// Mock current prices (in real app, fetch from pool)
+const currentPrices: Record<string, number> = {
+  GAO: 1.0,
+  FRUIT: 1.0,
+  VEG: 1.0,
+  GRAIN: 1.0,
+};
 
 // Mock demand trend data
 const demandData = [
@@ -141,19 +163,111 @@ const profitTrendData = [
 const TraderStore = () => {
   const navigate = useNavigate();
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [traderData, setTraderData] = useState<TraderData | null>(null);
+  const [swapHistory, setSwapHistory] = useState<any[]>([]);
+
+  // Load data from Supabase
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [trader, history] = await Promise.all([
+          getTraderData(),
+          getSwapHistory(20)
+        ]);
+
+        if (trader) {
+          setTraderData(trader);
+
+          // Calculate current prices from pool state
+          Object.entries(trader.pool_state).forEach(([pair, state]) => {
+            const symbol = pair.split('/')[0];
+            if (state.token_reserve > 0) {
+              currentPrices[symbol] = state.usdg_reserve / state.token_reserve;
+            }
+          });
+        }
+
+        setSwapHistory(history || []);
+      } catch (error) {
+        console.error('Error loading store data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadData();
+  }, []);
+
+  // Build inventory items from trader data
+  const inventoryItems = useMemo(() => {
+    if (!traderData?.token_balances) return [];
+
+    return Object.entries(traderData.token_balances)
+      .filter(([symbol]) => symbol !== 'USDG')
+      .map(([symbol, balance]) => {
+        const meta = tokenMetadata[symbol] || { name: symbol, image: '', color: '#888' };
+        const amount = balance.amount;
+        const avgPrice = amount > 0 ? balance.cost_basis / amount : 0;
+        const currentPrice = currentPrices[symbol] || 1;
+
+        // Get history for this token from swap history
+        const tokenHistory = swapHistory
+          .filter(h => h.to_token === symbol)
+          .slice(0, 5)
+          .map(h => ({
+            date: new Date(h.created_at).toLocaleDateString(),
+            type: 'Swap',
+            amount: h.to_amount,
+            price: h.from_amount / h.to_amount
+          }));
+
+        return {
+          id: symbol.toLowerCase(),
+          symbol,
+          name: meta.name,
+          amount,
+          avgPrice,
+          currentPrice,
+          status: amount > 100 ? 'Surplus' : amount > 0 ? 'Normal' : 'Empty',
+          image: meta.image,
+          color: meta.color,
+          history: tokenHistory
+        };
+      })
+      .filter(item => item.amount > 0); // Only show items with balance
+  }, [traderData, swapHistory]);
 
   const storeSummary = useMemo(() => {
     const totalValue = inventoryItems.reduce((acc, item) => acc + (item.amount * item.currentPrice), 0);
     const totalCost = inventoryItems.reduce((acc, item) => acc + (item.amount * item.avgPrice), 0);
     const totalProfit = totalValue - totalCost;
-    const roi = (totalProfit / totalCost) * 100;
+    const roi = totalCost > 0 ? (totalProfit / totalCost) * 100 : 0;
 
     return {
       totalValue: totalValue.toFixed(2),
       totalProfit: totalProfit.toFixed(2),
-      roi: roi.toFixed(1)
+      roi: roi.toFixed(1),
+      isPositive: totalProfit >= 0
     };
-  }, []);
+  }, [inventoryItems]);
+
+  const profitTrendData = useMemo(() => {
+    return inventoryItems.map(item => ({
+      name: item.symbol,
+      profit: item.amount * (item.currentPrice - item.avgPrice)
+    }));
+  }, [inventoryItems]);
+
+  if (isLoading) {
+    return (
+      <DashboardLayout mode="trader">
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout mode="trader">

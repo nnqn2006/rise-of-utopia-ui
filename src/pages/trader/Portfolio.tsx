@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -24,6 +24,7 @@ import {
     Activity,
     ArrowUpRight,
     ArrowDownRight,
+    Loader2,
 } from "lucide-react";
 import {
     AreaChart,
@@ -63,81 +64,153 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+    getUserAssets,
+    getTraderData,
+    getSwapHistory,
+    type UserAssets,
+    type TraderData,
+} from "@/services/gameDataService";
 
 // Mock constant for colors
 const COLORS = ["#8b5cf6", "#3b82f6", "#22c55e", "#f59e0b", "#ef4444"];
 
-// 1. Performance KPI Data
-const performanceKPIs = [
-    { label: "Tổng số giao dịch", value: "248", sub: "trades", icon: Activity, color: "primary" },
-    { label: "Tổng Volume", value: "$48,250", sub: "USDG", icon: Wallet, color: "blue" },
-    { label: "Tỷ lệ thắng (Win Rate)", value: "62.4%", sub: "+2.1% từ tuần trước", icon: Zap, color: "success", status: "good" },
-    { label: "Slippage trung bình", value: "0.42%", sub: "Thấp hơn 0.1% TB", icon: TrendingDown, color: "warning", status: "medium" },
-    { label: "Tổng P/L", value: "+$1,356", sub: "Lợi nhuận ròng", icon: TrendingUp, color: "success", status: "good" },
-    { label: "ROI tổng", value: "+18.6%", sub: "Trên vốn gốc", icon: BarChart3, color: "primary", status: "good" },
-];
-
-// 2. Profit/Loss Timeline Data
-const profitHistory = [
-    { date: "01/03", pl: 120, event: null },
-    { date: "05/03", pl: 340, event: "Dịch bệnh (GAO ↑)" },
-    { date: "10/03", pl: 280, event: null },
-    { date: "15/03", pl: 560, event: "Thiên tai (FRUIT ↑)" },
-    { date: "20/03", pl: 490, event: null },
-    { date: "25/03", pl: 850, event: "Chính sách mới" },
-    { date: "30/03", pl: 1356, event: null },
-];
-
-// 3. Distribution Data
-const tokenDistribution = [
-    { name: "GAO", value: 45, color: "#8b5cf6" },
-    { name: "FRUIT", value: 25, color: "#ef4444" },
-    { name: "VEG", value: 15, color: "#22c55e" },
-    { name: "GRAIN", value: 15, color: "#f59e0b" },
-];
-
-// 4. Active Pools Data
-const activePools = [
-    {
-        pool: "GAO / USDG",
-        value: 1200,
-        reward: 85,
-        divergence: 12,
-        risk: "high",
-        ratio: "44:56",
-        liquidity: 125000,
-        ilEstimate: 1.2,
-    },
-    {
-        pool: "FRUIT / USDG",
-        value: 850,
-        reward: 40,
-        divergence: 4,
-        risk: "safe",
-        ratio: "50:50",
-        liquidity: 98000,
-        ilEstimate: 0.15,
-    },
-];
-
-// 5. Transaction History Data
-const transactionHistory = [
-    { id: 1, time: "2024-03-12 14:20", action: "Swap", token: "USDG → GAO", amount: 100, slippage: 0.3, result: 8.5, status: "profit" },
-    { id: 2, time: "2024-03-13 09:15", action: "Swap", token: "GAO → USDG", amount: 80, slippage: 0.7, result: -4.2, status: "loss" },
-    { id: 3, time: "2024-03-14 16:45", action: "Stake", token: "GAO/USDG", amount: 200, slippage: 0.1, result: 0, status: "neutral" },
-    { id: 4, time: "2024-03-15 11:30", action: "Swap", token: "USDG → FRT", amount: 150, slippage: 1.2, result: 15.0, status: "profit" },
-];
+// Note: All mock data removed - will be generated dynamically from database
 
 const TraderPortfolio = () => {
     const [timeRange, setTimeRange] = useState("Tháng");
     const [searchQuery, setSearchQuery] = useState("");
+    const [isLoading, setIsLoading] = useState(true);
+
+    // Database data
+    const [assets, setAssets] = useState<UserAssets | null>(null);
+    const [traderData, setTraderData] = useState<TraderData | null>(null);
+    const [swapHistory, setSwapHistory] = useState<any[]>([]);
+
+    // Load data from Supabase
+    useEffect(() => {
+        const loadData = async () => {
+            try {
+                const [userAssets, trader, history] = await Promise.all([
+                    getUserAssets(),
+                    getTraderData(),
+                    getSwapHistory(50)
+                ]);
+
+                setAssets(userAssets);
+                setTraderData(trader);
+                setSwapHistory(history || []);
+            } catch (error) {
+                console.error('Error loading portfolio data:', error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        loadData();
+    }, []);
+
+    // Calculate KPIs from database
+    const performanceKPIs = useMemo(() => {
+        if (!traderData || !assets) return [];
+
+        const profitSwaps = swapHistory.filter(s => s.profit_loss > 0).length;
+        const winRate = swapHistory.length > 0 ? (profitSwaps / swapHistory.length) * 100 : 0;
+        const avgSlippage = swapHistory.length > 0
+            ? swapHistory.reduce((acc, s) => acc + s.slippage, 0) / swapHistory.length
+            : 0;
+        const roi = assets.usdg_balance > 0
+            ? (traderData.total_profit_loss / 100) * 100
+            : 0;
+
+        return [
+            { label: "Tổng số giao dịch", value: traderData.total_trades.toString(), sub: "trades", icon: Activity, color: "primary" },
+            { label: "Tổng Volume", value: `$${traderData.total_volume.toFixed(2)}`, sub: "USDG", icon: Wallet, color: "blue" },
+            { label: "Tỷ lệ thắng (Win Rate)", value: `${winRate.toFixed(1)}%`, sub: `${profitSwaps}/${swapHistory.length} swaps`, icon: Zap, color: "success", status: winRate > 50 ? "good" : "warning" },
+            { label: "Slippage trung bình", value: `${avgSlippage.toFixed(2)}%`, sub: avgSlippage < 0.5 ? "Thấp" : "Trung bình", icon: TrendingDown, color: "warning", status: avgSlippage < 1 ? "good" : "warning" },
+            { label: "Tổng P/L", value: `${traderData.total_profit_loss >= 0 ? '+' : ''}$${traderData.total_profit_loss.toFixed(2)}`, sub: "Lợi nhuận ròng", icon: TrendingUp, color: traderData.total_profit_loss >= 0 ? "success" : "destructive", status: traderData.total_profit_loss >= 0 ? "good" : "warning" },
+            { label: "ROI tổng", value: `${roi >= 0 ? '+' : ''}${roi.toFixed(1)}%`, sub: "Trên vốn gốc", icon: BarChart3, color: "primary", status: roi >= 0 ? "good" : "warning" },
+        ];
+    }, [traderData, assets, swapHistory]);
+
+    // Build transaction history from swap history
+    const transactionHistory = useMemo(() => {
+        return swapHistory.slice(0, 10).map((swap, index) => ({
+            id: index + 1,
+            time: new Date(swap.created_at).toLocaleString('vi-VN'),
+            action: "Swap",
+            token: `${swap.from_token} → ${swap.to_token}`,
+            amount: swap.from_amount,
+            slippage: swap.slippage,
+            result: swap.profit_loss,
+            status: swap.profit_loss > 0 ? "profit" : swap.profit_loss < 0 ? "loss" : "neutral"
+        }));
+    }, [swapHistory]);
+
+    // Token distribution from balances
+    const tokenDistribution = useMemo(() => {
+        if (!traderData?.token_balances) return [];
+
+        const colors = { GAO: "#8b5cf6", FRUIT: "#ef4444", VEG: "#22c55e", GRAIN: "#f59e0b" };
+        const total = Object.values(traderData.token_balances).reduce((acc, b) => acc + b.amount, 0);
+
+        return Object.entries(traderData.token_balances)
+            .filter(([symbol, balance]) => balance.amount > 0)
+            .map(([symbol, balance]) => ({
+                name: symbol,
+                value: total > 0 ? Math.round((balance.amount / total) * 100) : 0,
+                color: colors[symbol as keyof typeof colors] || "#888"
+            }));
+    }, [traderData]);
 
     const filteredHistory = useMemo(() => {
         return transactionHistory.filter(h =>
             h.token.toLowerCase().includes(searchQuery.toLowerCase()) ||
             h.action.toLowerCase().includes(searchQuery.toLowerCase())
         );
-    }, [searchQuery]);
+    }, [searchQuery, transactionHistory]);
+
+    // Reputation info
+    const reputationInfo = useMemo(() => {
+        if (!assets) return { points: 1000, level: "Tân thủ", nextLevel: 1500, progress: 0 };
+
+        const points = assets.reputation_points;
+        const level = assets.reputation_level;
+        const nextLevel = points < 1500 ? 1500 : points < 2500 ? 2500 : 5000;
+        const progress = (points / nextLevel) * 100;
+
+        return { points, level, nextLevel, progress };
+    }, [assets]);
+
+    // Dynamic profit history from swap history
+    const profitHistory = useMemo(() => {
+        if (swapHistory.length === 0) {
+            return [{ date: "Nay", pl: 0, event: null }];
+        }
+
+        let runningPL = 0;
+        return swapHistory.slice().reverse().map(swap => {
+            runningPL += swap.profit_loss || 0;
+            return {
+                date: new Date(swap.created_at).toLocaleDateString('vi-VN'),
+                pl: runningPL,
+                event: null
+            };
+        }).slice(-7);
+    }, [swapHistory]);
+
+    // Active pools - empty for new accounts (traders don't have liquidity pools)
+    const activePools: any[] = [];
+
+    if (isLoading) {
+        return (
+            <DashboardLayout mode="trader">
+                <div className="flex items-center justify-center h-64">
+                    <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                </div>
+            </DashboardLayout>
+        );
+    }
 
     return (
         <DashboardLayout mode="trader">
@@ -165,7 +238,7 @@ const TraderPortfolio = () => {
                                             <Tooltip>
                                                 <TooltipTrigger asChild>
                                                     <p className="font-bold cursor-help flex items-center gap-1">
-                                                        2,150 Điểm uy tín
+                                                        {reputationInfo.points.toLocaleString()} Điểm uy tín
                                                         <Info className="w-3 h-3 text-muted-foreground" />
                                                     </p>
                                                 </TooltipTrigger>
@@ -179,15 +252,15 @@ const TraderPortfolio = () => {
                                                 </TooltipContent>
                                             </Tooltip>
                                         </TooltipProvider>
-                                        <p className="text-xs text-muted-foreground font-medium">🏅 Thương nhân Bạc</p>
+                                        <p className="text-xs text-muted-foreground font-medium">🏅 {reputationInfo.level}</p>
                                     </div>
                                 </div>
                                 <div className="text-right">
                                     <p className="text-[10px] text-muted-foreground uppercase font-bold">Tiến trình lên Vàng</p>
-                                    <p className="text-xs font-bold">2,150 / 3,000</p>
+                                    <p className="text-xs font-bold">{reputationInfo.points.toLocaleString()} / {reputationInfo.nextLevel.toLocaleString()}</p>
                                 </div>
                             </div>
-                            <Progress value={72} className="h-2 gradient-primary" />
+                            <Progress value={reputationInfo.progress} className="h-2 gradient-primary" />
                         </CardContent>
                     </Card>
                 </div>
@@ -310,34 +383,48 @@ const TraderPortfolio = () => {
                                 </CardTitle>
                             </CardHeader>
                             <CardContent>
-                                <div className="h-[180px] w-full mt-2">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <PieChart>
-                                            <Pie
-                                                data={[
-                                                    { name: "Thắng (Wins)", value: 62.4, color: "hsl(var(--success))" },
-                                                    { name: "Thua (Losses)", value: 37.6, color: "hsl(var(--destructive))" },
-                                                ]}
-                                                cx="50%"
-                                                cy="50%"
-                                                innerRadius={50}
-                                                outerRadius={70}
-                                                paddingAngle={5}
-                                                dataKey="value"
-                                            >
-                                                {[0, 1].map((entry, index) => (
-                                                    <Cell key={`cell-${index}`} fill={index === 0 ? "hsl(var(--success))" : "hsl(var(--destructive))"} />
-                                                ))}
-                                            </Pie>
-                                            <Legend
-                                                verticalAlign="bottom"
-                                                align="center"
-                                                iconType="circle"
-                                                formatter={(v) => <span className="text-[10px] uppercase font-bold text-muted-foreground">{v}</span>}
-                                            />
-                                        </PieChart>
-                                    </ResponsiveContainer>
-                                </div>
+                                {swapHistory.length > 0 ? (
+                                    <div className="h-[180px] w-full mt-2">
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <PieChart>
+                                                <Pie
+                                                    data={(() => {
+                                                        const wins = swapHistory.filter(s => s.profit_loss > 0).length;
+                                                        const losses = swapHistory.filter(s => s.profit_loss < 0).length;
+                                                        const total = wins + losses || 1;
+                                                        return [
+                                                            { name: "Thắng (Wins)", value: (wins / total) * 100 },
+                                                            { name: "Thua (Losses)", value: (losses / total) * 100 },
+                                                        ];
+                                                    })()}
+                                                    cx="50%"
+                                                    cy="50%"
+                                                    innerRadius={50}
+                                                    outerRadius={70}
+                                                    paddingAngle={5}
+                                                    dataKey="value"
+                                                >
+                                                    {[0, 1].map((entry, index) => (
+                                                        <Cell key={`cell-${index}`} fill={index === 0 ? "hsl(var(--success))" : "hsl(var(--destructive))"} />
+                                                    ))}
+                                                </Pie>
+                                                <Legend
+                                                    verticalAlign="bottom"
+                                                    align="center"
+                                                    iconType="circle"
+                                                    formatter={(v) => <span className="text-[10px] uppercase font-bold text-muted-foreground">{v}</span>}
+                                                />
+                                            </PieChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                ) : (
+                                    <div className="h-[180px] w-full mt-2 flex items-center justify-center">
+                                        <p className="text-sm text-muted-foreground text-center">
+                                            Chưa có giao dịch nào.<br />
+                                            <span className="text-xs">Thực hiện swap để xem thống kê.</span>
+                                        </p>
+                                    </div>
+                                )}
                             </CardContent>
                         </Card>
 
@@ -348,22 +435,35 @@ const TraderPortfolio = () => {
                                 </CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-3">
-                                <div className="flex gap-3 items-start">
-                                    <div className="p-1.5 rounded bg-primary/20 text-primary">
-                                        <Info className="w-3 h-3" />
+                                {swapHistory.length > 0 ? (
+                                    <>
+                                        <div className="flex gap-3 items-start">
+                                            <div className="p-1.5 rounded bg-primary/20 text-primary">
+                                                <Info className="w-3 h-3" />
+                                            </div>
+                                            <p className="text-[11px] leading-relaxed">
+                                                Bạn đã thực hiện <span className="text-primary font-bold">{traderData?.total_trades || 0}</span> giao dịch với volume <span className="text-primary font-bold">${(traderData?.total_volume || 0).toFixed(2)}</span>.
+                                            </p>
+                                        </div>
+                                        <div className="flex gap-3 items-start">
+                                            <div className="p-1.5 rounded bg-success/20 text-success">
+                                                <TrendingUp className="w-3 h-3" />
+                                            </div>
+                                            <p className="text-[11px] leading-relaxed">
+                                                Tổng P/L: <span className={`font-bold ${(traderData?.total_profit_loss || 0) >= 0 ? 'text-success' : 'text-destructive'}`}>${(traderData?.total_profit_loss || 0).toFixed(2)}</span>
+                                            </p>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div className="flex gap-3 items-start">
+                                        <div className="p-1.5 rounded bg-primary/20 text-primary">
+                                            <Info className="w-3 h-3" />
+                                        </div>
+                                        <p className="text-[11px] leading-relaxed">
+                                            Chào mừng bạn! Hãy bắt đầu giao dịch để nhận <span className="text-primary font-bold">gợi ý từ AI</span>.
+                                        </p>
                                     </div>
-                                    <p className="text-[11px] leading-relaxed">
-                                        Bạn đang giao dịch tốt với <span className="text-primary font-bold">GAO</span>, hãy tiếp tục tối ưu lợi nhuận tại đây.
-                                    </p>
-                                </div>
-                                <div className="flex gap-3 items-start">
-                                    <div className="p-1.5 rounded bg-warning/20 text-warning">
-                                        <AlertTriangle className="w-3 h-3" />
-                                    </div>
-                                    <p className="text-[11px] leading-relaxed">
-                                        Slippage của bạn đang tăng nhẹ. Hãy <span className="text-warning font-bold">giảm khối lượng mỗi lệnh</span> để kiểm soát tốt hơn.
-                                    </p>
-                                </div>
+                                )}
                                 <Button variant="link" size="sm" className="w-full text-xs text-primary font-bold p-0">
                                     Xem tất cả gợi ý <ChevronRight className="w-3 h-3 ml-1" />
                                 </Button>
@@ -380,96 +480,109 @@ const TraderPortfolio = () => {
                                 <CardTitle>Hồ thanh khoản (Active Pools)</CardTitle>
                                 <CardDescription>Các vị thế yield farming đang tham gia</CardDescription>
                             </div>
-                            <Badge className="bg-success/20 text-success border-success/20">
-                                Lợi nhuận ổn định
-                            </Badge>
+                            {activePools.length > 0 ? (
+                                <Badge className="bg-success/20 text-success border-success/20">
+                                    Lợi nhuận ổn định
+                                </Badge>
+                            ) : (
+                                <Badge className="bg-muted/20 text-muted-foreground border-muted/20">
+                                    Chưa có vị thế
+                                </Badge>
+                            )}
                         </div>
                     </CardHeader>
                     <CardContent>
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Pool</TableHead>
-                                    <TableHead>Giá trị hiện tại</TableHead>
-                                    <TableHead>Reward dự kiến</TableHead>
-                                    <TableHead>Lệch token</TableHead>
-                                    <TableHead>Rủi ro</TableHead>
-                                    <TableHead className="text-right">Thao tác</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {activePools.map((pool) => (
-                                    <TableRow key={pool.pool} className="group hover:bg-muted/30">
-                                        <TableCell className="font-bold">{pool.pool}</TableCell>
-                                        <TableCell>${pool.value.toLocaleString()}</TableCell>
-                                        <TableCell className="text-success font-medium">+${pool.reward}</TableCell>
-                                        <TableCell>
-                                            <div className="flex items-center gap-2">
-                                                <Progress value={pool.divergence} className="h-1.5 w-16" />
-                                                <span className="text-[10px] font-bold">{pool.divergence}%</span>
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            {pool.risk === "high" ? (
-                                                <Badge variant="outline" className="text-destructive border-destructive/30 bg-destructive/5 gap-1">
-                                                    <AlertTriangle className="w-3 h-3" /> Cao
-                                                </Badge>
-                                            ) : (
-                                                <Badge variant="outline" className="text-success border-success/30 bg-success/5 gap-1">
-                                                    <CheckCircle2 className="w-3 h-3" /> Thấp
-                                                </Badge>
-                                            )}
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                            <Dialog>
-                                                <DialogTrigger asChild>
-                                                    <Button variant="ghost" size="sm" className="text-primary hover:bg-primary/10">
-                                                        Chi tiết <ChevronRight className="w-4 h-4 ml-1" />
-                                                    </Button>
-                                                </DialogTrigger>
-                                                <DialogContent className="max-w-lg glass-card border-primary/20">
-                                                    <DialogHeader>
-                                                        <DialogTitle className="text-xl">Chi tiết Pool {pool.pool}</DialogTitle>
-                                                        <DialogDescription>Phân tích hiệu suất staking</DialogDescription>
-                                                    </DialogHeader>
-
-                                                    <div className="grid grid-cols-2 gap-4 my-4">
-                                                        <Card className="bg-muted/30">
-                                                            <CardContent className="p-4 text-center">
-                                                                <p className="text-[10px] text-muted-foreground uppercase font-bold">Impermanent Loss</p>
-                                                                <p className="text-lg font-bold text-destructive">-{pool.ilEstimate}%</p>
-                                                            </CardContent>
-                                                        </Card>
-                                                        <Card className="bg-muted/30">
-                                                            <CardContent className="p-4 text-center">
-                                                                <p className="text-[10px] text-muted-foreground uppercase font-bold">Reward thu được</p>
-                                                                <p className="text-lg font-bold text-success">+${pool.reward.toFixed(2)}</p>
-                                                            </CardContent>
-                                                        </Card>
-                                                    </div>
-
-                                                    <div className="space-y-3">
-                                                        <div className="flex justify-between text-sm">
-                                                            <span className="text-muted-foreground">Tỷ lệ thanh khoản:</span>
-                                                            <span className="font-bold">{pool.ratio}</span>
-                                                        </div>
-                                                        <div className="flex justify-between text-sm">
-                                                            <span className="text-muted-foreground">Tổng thanh khoản:</span>
-                                                            <span className="font-bold">${pool.liquidity.toLocaleString()}</span>
-                                                        </div>
-                                                    </div>
-
-                                                    <DialogFooter className="mt-6 flex gap-2">
-                                                        <Button variant="outline" className="flex-1">Rút thanh khoản</Button>
-                                                        <Button className="flex-1 gradient-primary">Tái cân bằng (Rebalance)</Button>
-                                                    </DialogFooter>
-                                                </DialogContent>
-                                            </Dialog>
-                                        </TableCell>
+                        {activePools.length > 0 ? (
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Pool</TableHead>
+                                        <TableHead>Giá trị hiện tại</TableHead>
+                                        <TableHead>Reward dự kiến</TableHead>
+                                        <TableHead>Lệch token</TableHead>
+                                        <TableHead>Rủi ro</TableHead>
+                                        <TableHead className="text-right">Thao tác</TableHead>
                                     </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
+                                </TableHeader>
+                                <TableBody>
+                                    {activePools.map((pool) => (
+                                        <TableRow key={pool.pool} className="group hover:bg-muted/30">
+                                            <TableCell className="font-bold">{pool.pool}</TableCell>
+                                            <TableCell>${pool.value.toLocaleString()}</TableCell>
+                                            <TableCell className="text-success font-medium">+${pool.reward}</TableCell>
+                                            <TableCell>
+                                                <div className="flex items-center gap-2">
+                                                    <Progress value={pool.divergence} className="h-1.5 w-16" />
+                                                    <span className="text-[10px] font-bold">{pool.divergence}%</span>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                {pool.risk === "high" ? (
+                                                    <Badge variant="outline" className="text-destructive border-destructive/30 bg-destructive/5 gap-1">
+                                                        <AlertTriangle className="w-3 h-3" /> Cao
+                                                    </Badge>
+                                                ) : (
+                                                    <Badge variant="outline" className="text-success border-success/30 bg-success/5 gap-1">
+                                                        <CheckCircle2 className="w-3 h-3" /> Thấp
+                                                    </Badge>
+                                                )}
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                                <Dialog>
+                                                    <DialogTrigger asChild>
+                                                        <Button variant="ghost" size="sm" className="text-primary hover:bg-primary/10">
+                                                            Chi tiết <ChevronRight className="w-4 h-4 ml-1" />
+                                                        </Button>
+                                                    </DialogTrigger>
+                                                    <DialogContent className="max-w-lg glass-card border-primary/20">
+                                                        <DialogHeader>
+                                                            <DialogTitle className="text-xl">Chi tiết Pool {pool.pool}</DialogTitle>
+                                                            <DialogDescription>Phân tích hiệu suất staking</DialogDescription>
+                                                        </DialogHeader>
+
+                                                        <div className="grid grid-cols-2 gap-4 my-4">
+                                                            <Card className="bg-muted/30">
+                                                                <CardContent className="p-4 text-center">
+                                                                    <p className="text-[10px] text-muted-foreground uppercase font-bold">Impermanent Loss</p>
+                                                                    <p className="text-lg font-bold text-destructive">-{pool.ilEstimate}%</p>
+                                                                </CardContent>
+                                                            </Card>
+                                                            <Card className="bg-muted/30">
+                                                                <CardContent className="p-4 text-center">
+                                                                    <p className="text-[10px] text-muted-foreground uppercase font-bold">Reward thu được</p>
+                                                                    <p className="text-lg font-bold text-success">+${pool.reward.toFixed(2)}</p>
+                                                                </CardContent>
+                                                            </Card>
+                                                        </div>
+
+                                                        <div className="space-y-3">
+                                                            <div className="flex justify-between text-sm">
+                                                                <span className="text-muted-foreground">Tỷ lệ thanh khoản:</span>
+                                                                <span className="font-bold">{pool.ratio}</span>
+                                                            </div>
+                                                            <div className="flex justify-between text-sm">
+                                                                <span className="text-muted-foreground">Tổng thanh khoản:</span>
+                                                                <span className="font-bold">${pool.liquidity.toLocaleString()}</span>
+                                                            </div>
+                                                        </div>
+
+                                                        <DialogFooter className="mt-6 flex gap-2">
+                                                            <Button variant="outline" className="flex-1">Rút thanh khoản</Button>
+                                                            <Button className="flex-1 gradient-primary">Tái cân bằng (Rebalance)</Button>
+                                                        </DialogFooter>
+                                                    </DialogContent>
+                                                </Dialog>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        ) : (
+                            <div className="py-8 text-center text-muted-foreground">
+                                <p className="text-sm">Chưa tham gia hồ thanh khoản nào.</p>
+                                <p className="text-xs mt-1">Đây là tính năng dành cho Farmer.</p>
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
 

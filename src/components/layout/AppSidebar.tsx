@@ -67,24 +67,10 @@ export function AppSidebar({ mode }: AppSidebarProps) {
   return (
     <>
       <Sidebar collapsible="icon" className="border-r border-sidebar-border">
-        <SidebarHeader className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center flex-shrink-0">
-              <span className="text-lg font-bold text-primary-foreground">R</span>
-            </div>
-            <div className="group-data-[collapsible=icon]:hidden">
-              <h2 className="font-bold text-foreground">Rise of Ledger</h2>
-              <p className="text-xs text-muted-foreground">
-                {mode === "farmer" ? "Nông dân" : "Thương nhân"}
-              </p>
-            </div>
-          </div>
-        </SidebarHeader>
-
-        {/* User Profile Section */}
-        <div className="px-2 py-2 border-b border-sidebar-border">
+        {/* User Profile at the top */}
+        <SidebarHeader className="p-2 border-b border-sidebar-border">
           <UserProfileDropdown />
-        </div>
+        </SidebarHeader>
 
         <SidebarContent>
           <SidebarGroup>

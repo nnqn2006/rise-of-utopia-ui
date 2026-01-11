@@ -19,6 +19,7 @@ import {
   Bug,
   Calculator,
   RefreshCw,
+  Loader2,
 } from "lucide-react";
 import {
   LineChart,
@@ -48,6 +49,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  getUserAssets,
+  getTraderData,
+} from "@/services/gameDataService";
 
 // Price data for all 4 tokens
 const priceData = [
@@ -157,22 +162,53 @@ const TraderDashboard = () => {
   const navigate = useNavigate();
   const [currentNews, setCurrentNews] = useState<typeof allNewsEvents>([]);
   const [lastUpdate, setLastUpdate] = useState(new Date());
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Rotate news every 5 minutes
+  // Stats from database
+  const [stats, setStats] = useState({
+    cashBalance: 100.0,
+    reputation: 1000,
+    reputationMax: 3000,
+    reputationLevel: "Tân thủ",
+    profitLoss: 0,
+    profitLossPercent: 0,
+    totalInventory: 0,
+  });
+
+  // Load data from Supabase
   useEffect(() => {
-    const getRandomNews = () => {
-      const shuffled = [...allNewsEvents].sort(() => Math.random() - 0.5);
-      return shuffled.slice(0, 4);
+    const loadData = async () => {
+      try {
+        const [assets, trader] = await Promise.all([
+          getUserAssets(),
+          getTraderData()
+        ]);
+
+        if (assets && trader) {
+          // Calculate total inventory
+          let totalInventory = 0;
+          Object.values(trader.token_balances).forEach((token: { amount: number }) => {
+            totalInventory += token.amount;
+          });
+
+          setStats({
+            cashBalance: assets.usdg_balance,
+            reputation: assets.reputation_points,
+            reputationMax: 3000,
+            reputationLevel: assets.reputation_level,
+            profitLoss: trader.total_profit_loss,
+            profitLossPercent: assets.usdg_balance > 0 ? (trader.total_profit_loss / 100) * 100 : 0,
+            totalInventory,
+          });
+        }
+      } catch (error) {
+        console.error('Error loading dashboard data:', error);
+      } finally {
+        setIsLoading(false);
+      }
     };
 
-    setCurrentNews(getRandomNews());
-
-    const interval = setInterval(() => {
-      setCurrentNews(getRandomNews());
-      setLastUpdate(new Date());
-    }, 5 * 60 * 1000); // 5 minutes
-
-    return () => clearInterval(interval);
+    loadData();
   }, []);
 
   const getNewsIcon = (type: string) => {
@@ -231,7 +267,7 @@ const TraderDashboard = () => {
                 <div>
                   <p className="text-sm text-muted-foreground">Số dư tiền</p>
                   <p className="text-2xl font-bold text-foreground">
-                    ${traderStats.cashBalance.toLocaleString()}
+                    ${stats.cashBalance.toLocaleString()}
                   </p>
                   <p className="text-xs text-muted-foreground">USDG</p>
                 </div>
@@ -248,15 +284,15 @@ const TraderDashboard = () => {
                 <div className="flex-1">
                   <p className="text-sm text-muted-foreground">Điểm uy tín</p>
                   <p className="text-2xl font-bold text-foreground">
-                    {traderStats.reputation.toLocaleString()}
+                    {stats.reputation.toLocaleString()}
                   </p>
                   <div className="flex items-center gap-2 mt-1">
                     <Progress
-                      value={(traderStats.reputation / traderStats.reputationMax) * 100}
+                      value={(stats.reputation / stats.reputationMax) * 100}
                       className="h-1.5 flex-1"
                     />
                     <span className="text-xs text-muted-foreground">
-                      {traderStats.reputationLevel}
+                      {stats.reputationLevel}
                     </span>
                   </div>
                 </div>
@@ -273,10 +309,10 @@ const TraderDashboard = () => {
                 <div>
                   <p className="text-sm text-muted-foreground">Lợi nhuận/Lỗ</p>
                   <p className="text-2xl font-bold text-success">
-                    +${traderStats.profitLoss.toFixed(2)}
+                    {stats.profitLoss >= 0 ? '+' : ''}${stats.profitLoss.toFixed(2)}
                   </p>
                   <p className="text-xs text-success">
-                    +{traderStats.profitLossPercent}%
+                    {stats.profitLossPercent >= 0 ? '+' : ''}{stats.profitLossPercent.toFixed(1)}%
                   </p>
                 </div>
               </div>
@@ -292,7 +328,7 @@ const TraderDashboard = () => {
                 <div>
                   <p className="text-sm text-muted-foreground">Tổng Inventory</p>
                   <p className="text-2xl font-bold text-foreground">
-                    {traderStats.totalInventory}
+                    {stats.totalInventory}
                   </p>
                   <p className="text-xs text-muted-foreground">đơn vị</p>
                 </div>

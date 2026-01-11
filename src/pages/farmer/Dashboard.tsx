@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
@@ -20,6 +20,7 @@ import {
   AlertCircle,
   TrendingUp,
   TrendingDown,
+  Loader2,
 } from "lucide-react";
 import { Sparkline, AnimatedCounter } from "@/components/dashboard";
 import {
@@ -33,6 +34,10 @@ import {
   Bar,
   Legend,
 } from "recharts";
+import {
+  getUserAssets,
+  getFarmerData,
+} from "@/services/gameDataService";
 
 // Price data for all 4 tokens (same as Trader Dashboard)
 const priceData = [
@@ -55,9 +60,79 @@ const poolData: Record<string, { ratio: number; emoji: string; name: string; sta
 
 const FarmerDashboard = () => {
   const [selectedPool, setSelectedPool] = useState("GAO/USDG");
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Mock data
-  const netWorthTrend = [1180, 1210, 1195, 1240, 1220, 1235, 1250];
+  // Stats from database
+  const [stats, setStats] = useState({
+    totalAssets: 100,
+    workingCapital: 100,
+    reputationScore: 1000,
+    level: 1,
+    xp: 0,
+    nextXp: 500,
+  });
+
+  const [poolData, setPoolData] = useState<Record<string, { ratio: number; emoji: string; name: string; status: string }>>({
+    "GAO/USDG": { ratio: 50.0, emoji: "🌾", name: "GAO", status: "Cân bằng" },
+    "FRUIT/USDG": { ratio: 50.0, emoji: "🍎", name: "FRUIT", status: "Cân bằng" },
+    "VEG/USDG": { ratio: 50.0, emoji: "🥬", name: "VEG", status: "Cân bằng" },
+    "GRAIN/USDG": { ratio: 50.0, emoji: "🌽", name: "GRAIN", status: "Cân bằng" },
+  });
+
+  // Load data from Supabase
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [assets, farmer] = await Promise.all([
+          getUserAssets(),
+          getFarmerData()
+        ]);
+
+        if (assets) {
+          const level = assets.level || 1;
+          const xp = assets.xp || 0;
+          const nextXp = level * 500;
+
+          setStats({
+            totalAssets: assets.usdg_balance,
+            workingCapital: assets.usdg_balance,
+            reputationScore: assets.reputation_points,
+            level,
+            xp,
+            nextXp,
+          });
+        }
+
+        if (farmer?.pool_state) {
+          const newPoolData: Record<string, { ratio: number; emoji: string; name: string; status: string }> = {};
+
+          Object.entries(farmer.pool_state).forEach(([pair, state]) => {
+            const tokenSymbol = pair.split('/')[0];
+            const ratio = state.token_reserve / (state.token_reserve + state.usdg_reserve) * 100;
+            const emoji = tokenSymbol === 'GAO' ? '🌾' : tokenSymbol === 'FRUIT' ? '🍎' : tokenSymbol === 'VEG' ? '🥬' : '🌽';
+
+            newPoolData[pair] = {
+              ratio,
+              emoji,
+              name: tokenSymbol,
+              status: ratio >= 45 && ratio <= 55 ? 'Cân bằng' : 'Lệch'
+            };
+          });
+
+          setPoolData(newPoolData);
+        }
+      } catch (error) {
+        console.error('Error loading farmer dashboard:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadData();
+  }, []);
+
+  // Mock data for UI
+  const netWorthTrend = [stats.totalAssets * 0.94, stats.totalAssets * 0.97, stats.totalAssets * 0.96, stats.totalAssets * 0.99, stats.totalAssets * 0.98, stats.totalAssets * 0.99, stats.totalAssets];
   const tradingSignals = [
     "🔥 GAO/USDG +150%",
     "📈 RSI GAO quá bán",
@@ -65,9 +140,8 @@ const FarmerDashboard = () => {
     "🌾 Thời tiết +12%",
     "💰 APY GAO: 45%",
   ];
-  const reputationScore = 1850;
 
-  const currentPool = poolData[selectedPool];
+  const currentPool = poolData[selectedPool] || poolData["GAO/USDG"];
   const poolRatio = currentPool.ratio;
 
   return (
@@ -88,7 +162,7 @@ const FarmerDashboard = () => {
                 <Coins className="w-6 h-6 text-primary" />
               </div>
               <p className="text-sm text-muted-foreground">Tổng tài sản</p>
-              <p className="text-3xl font-bold">$1,250</p>
+              <p className="text-3xl font-bold">${stats.totalAssets.toLocaleString()}</p>
               <Sparkline data={netWorthTrend} width={70} height={24} className="mt-2" />
               <p className="text-sm text-success mt-1">+5.9% (7d)</p>
             </CardContent>
@@ -101,8 +175,8 @@ const FarmerDashboard = () => {
                 <Wallet className="w-6 h-6 text-secondary" />
               </div>
               <p className="text-sm text-muted-foreground">Vốn lưu động</p>
-              <p className="text-3xl font-bold">$350</p>
-              <p className="text-sm text-muted-foreground mt-3">+ $215 vật tư</p>
+              <p className="text-3xl font-bold">${stats.workingCapital.toLocaleString()}</p>
+              <p className="text-sm text-muted-foreground mt-3">USDG</p>
             </CardContent>
           </Card>
 
@@ -159,7 +233,7 @@ const FarmerDashboard = () => {
                 <p className="text-sm font-semibold">Nông dân thành đạt</p>
                 <div className="mt-1">
                   <Progress value={92} className="h-1" />
-                  <p className="text-xs text-muted-foreground mt-0.5">{reputationScore} / 2001 điểm</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{stats.reputationScore} / 2001 điểm</p>
                 </div>
               </div>
             </div>
@@ -232,13 +306,13 @@ const FarmerDashboard = () => {
             <CardContent className="p-3">
               <div className="flex items-center gap-2 mb-2">
                 <Award className="w-4 h-4 text-primary" />
-                <span className="text-sm font-medium">Cấp độ 5</span>
-                <span className="text-xs text-muted-foreground ml-auto">2,450/3,000 XP</span>
+                <span className="text-sm font-medium">Cấp độ {stats.level}</span>
+                <span className="text-xs text-muted-foreground ml-auto">{stats.xp.toLocaleString()}/{stats.nextXp.toLocaleString()} XP</span>
               </div>
-              <Progress value={82} className="h-1.5 mb-2" />
+              <Progress value={stats.nextXp > 0 ? (stats.xp / stats.nextXp) * 100 : 0} className="h-1.5 mb-2" />
               <div className="flex items-center justify-between text-xs">
                 <span className="text-muted-foreground">Uy tín</span>
-                <span className="text-primary font-medium">{reputationScore} điểm</span>
+                <span className="text-primary font-medium">{stats.reputationScore} điểm</span>
               </div>
             </CardContent>
           </Card>

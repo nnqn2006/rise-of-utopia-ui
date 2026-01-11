@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import {
     DropdownMenu,
@@ -37,6 +37,13 @@ export function UserProfileDropdown() {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const imageRef = useRef<HTMLImageElement | null>(null);
+
+    // Refresh user data on mount and location change
+    useEffect(() => {
+        const currentUser = AuthService.getCurrentUser();
+        console.log('UserProfileDropdown - Loading user from localStorage:', currentUser);
+        setUser(currentUser);
+    }, [location.pathname]);
 
     // Get current role from URL
     const currentRole = location.pathname.startsWith("/farmer") ? "Nông dân" : "Thương nhân";
@@ -155,7 +162,12 @@ export function UserProfileDropdown() {
         }
     };
 
-    if (!user) return null;
+    // Default display when not logged in
+    const displayUser = user || {
+        username: "Khách",
+        fullname: "Khách",
+        avatar: undefined
+    };
 
     return (
         <>
@@ -163,34 +175,42 @@ export function UserProfileDropdown() {
                 <DropdownMenuTrigger asChild>
                     <button className="flex items-center gap-3 w-full p-3 rounded-lg hover:bg-sidebar-accent transition-colors cursor-pointer text-left">
                         <Avatar className="w-10 h-10 rounded-lg">
-                            <AvatarImage src={user.avatar} alt={user.username} />
+                            <AvatarImage src={displayUser.avatar} alt={displayUser.username} />
                             <AvatarFallback className="rounded-lg bg-primary/20 text-primary font-semibold">
-                                {getInitials()}
+                                {user ? getInitials() : "?"}
                             </AvatarFallback>
                         </Avatar>
                         <div className="flex-1 min-w-0 group-data-[collapsible=icon]:hidden">
-                            <p className="text-sm font-medium text-foreground truncate">{user.username}</p>
+                            <p className="text-sm font-medium text-foreground truncate">{displayUser.username}</p>
                             <p className="text-xs text-muted-foreground">{currentRole}</p>
                         </div>
                         <ChevronDown className="w-4 h-4 text-muted-foreground group-data-[collapsible=icon]:hidden" />
                     </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="w-56">
-                    <DropdownMenuItem onClick={() => setShowAvatarDialog(true)} className="cursor-pointer">
-                        <Camera className="w-4 h-4 mr-2" />
-                        Đổi ảnh đại diện
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                        onClick={() => {
-                            setNewUsername(user.username);
-                            setShowUsernameDialog(true);
-                        }}
-                        className="cursor-pointer"
-                    >
-                        <UserPen className="w-4 h-4 mr-2" />
-                        Đổi tên người dùng
-                    </DropdownMenuItem>
+                    {user ? (
+                        <>
+                            <DropdownMenuItem onClick={() => setShowAvatarDialog(true)} className="cursor-pointer">
+                                <Camera className="w-4 h-4 mr-2" />
+                                Đổi ảnh đại diện
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                                onClick={() => {
+                                    setNewUsername(user.username);
+                                    setShowUsernameDialog(true);
+                                }}
+                                className="cursor-pointer"
+                            >
+                                <UserPen className="w-4 h-4 mr-2" />
+                                Đổi tên người dùng
+                            </DropdownMenuItem>
+                        </>
+                    ) : (
+                        <DropdownMenuItem className="text-muted-foreground">
+                            Vui lòng đăng nhập
+                        </DropdownMenuItem>
+                    )}
                 </DropdownMenuContent>
             </DropdownMenu>
 

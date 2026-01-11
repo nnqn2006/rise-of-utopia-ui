@@ -18,13 +18,29 @@ export const AuthService = {
     // Check if current user has a specific role
     hasRole: (role: "farmer" | "trader"): boolean => {
         const user = AuthService.getCurrentUser();
-        return user?.roles?.includes(role) ?? false;
+        if (!user?.roles) return false;
+
+        // Handle both array and string formats
+        const roles = Array.isArray(user.roles) ? user.roles :
+            typeof user.roles === 'string' ? [user.roles] : [];
+        return roles.includes(role);
     },
 
     // Check if current user has both roles
     hasBothRoles: (): boolean => {
         const user = AuthService.getCurrentUser();
-        return user?.roles?.includes("farmer") && user?.roles?.includes("trader") || false;
+        if (!user?.roles) return false;
+
+        // Handle both array and string formats from Supabase
+        const roles = Array.isArray(user.roles) ? user.roles :
+            typeof user.roles === 'string' ? [user.roles] : [];
+
+        const hasFarmer = roles.includes("farmer");
+        const hasTrader = roles.includes("trader");
+
+        console.log('Auth roles check:', { roles, hasFarmer, hasTrader });
+
+        return hasFarmer && hasTrader;
     },
 
     // Check if user exists by field

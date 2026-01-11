@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +19,7 @@ import {
   Filter,
   Activity,
   ArrowUpRight,
+  Loader2,
 } from "lucide-react";
 import {
   AreaChart,
@@ -43,73 +44,172 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  getUserAssets,
+  getFarmerData,
+  getFarmerActivityHistory,
+  type UserAssets,
+  type FarmerData,
+} from "@/services/gameDataService";
 
-// Asset Growth Timeline Data (từ 1,250 USDG ban đầu)
-const assetGrowthData = [
-  { date: "01/01", value: 1250, label: "Bắt đầu" },
-  { date: "15/01", value: 1380, label: null },
-  { date: "01/02", value: 1520, label: null },
-  { date: "15/02", value: 1680, label: "Thu hoạch lớn" },
-  { date: "01/03", value: 1850, label: null },
-  { date: "15/03", value: 2150, label: null },
-  { date: "01/04", value: 2450, label: "Nạp thêm LP" },
-  { date: "15/04", value: 2650, label: null },
-  { date: "Nay", value: 2850, label: "Hiện tại" },
-];
-
-// P/L Timeline Data
-const profitHistory = [
-  { date: "01/03", pl: 120, event: null },
-  { date: "05/03", pl: 280, event: "Thu hoạch GAO" },
-  { date: "10/03", pl: 380, event: null },
-  { date: "15/03", pl: 560, event: "Stake thêm FRUIT" },
-  { date: "20/03", pl: 720, event: null },
-  { date: "25/03", pl: 950, event: "Thu hoạch VEG" },
-  { date: "30/03", pl: 1200, event: null },
-  { date: "05/04", pl: 1450, event: "Compound rewards" },
-];
-
-// Capital Allocation Data
-const capitalAllocation = [
-  { name: "GAO", value: 45, color: "#8b5cf6", amount: "$1,282.50" },
-  { name: "FRUIT", value: 25, color: "#ef4444", amount: "$712.50" },
-  { name: "VEG", value: 15, color: "#22c55e", amount: "$427.50" },
-  { name: "GRAIN", value: 15, color: "#f59e0b", amount: "$427.50" },
-];
-
-// Activity History Data
-const activityHistory = [
-  { id: 1, time: "2024-04-15 14:20", action: "Thu hoạch", pool: "GAO/USDG", sim: 45.5, status: "success" },
-  { id: 2, time: "2024-04-14 09:15", action: "Nạp thanh khoản", pool: "FRUIT/USDG", sim: 0, status: "neutral" },
-  { id: 3, time: "2024-04-13 16:45", action: "Stake", pool: "VEG/USDG", sim: 0, status: "neutral" },
-  { id: 4, time: "2024-04-12 11:30", action: "Thu hoạch", pool: "FRUIT/USDG", sim: 32.2, status: "success" },
-  { id: 5, time: "2024-04-10 08:45", action: "Unstake", pool: "GRAIN/USDG", sim: 0, status: "warning" },
-  { id: 6, time: "2024-04-08 15:20", action: "Thu hoạch", pool: "GAO/USDG", sim: 126.0, status: "success" },
-];
-
-// Badges data
-const badges = [
-  { id: 1, emoji: "🌾", name: "Bậc thầy nông dân", desc: "Stake GAO nhiều", unlocked: true },
-  { id: 2, emoji: "⚖️", name: "Chuyên gia cân bằng Pool", desc: "Nạp thanh khoản đúng lúc", unlocked: true },
-  { id: 3, emoji: "💎", name: "HODLer kiên định", desc: "Stake > 30 ngày", unlocked: true },
-  { id: 4, emoji: "🔥", name: "Người tiên phong", desc: "Tham gia từ đầu", unlocked: false },
-];
+// Note: All mock data removed - will be generated dynamically from database
 
 const FarmerPortfolio = () => {
   const [timeRange, setTimeRange] = useState("Tháng");
   const [searchQuery, setSearchQuery] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Database data
+  const [assets, setAssets] = useState<UserAssets | null>(null);
+  const [farmerData, setFarmerData] = useState<FarmerData | null>(null);
+  const [activityHistory, setActivityHistory] = useState<any[]>([]);
+
+  // Load data from Supabase
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [userAssets, farmer, history] = await Promise.all([
+          getUserAssets(),
+          getFarmerData(),
+          getFarmerActivityHistory(30)
+        ]);
+
+        setAssets(userAssets);
+        setFarmerData(farmer);
+        setActivityHistory(history || []);
+      } catch (error) {
+        console.error('Error loading farmer portfolio:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadData();
+  }, []);
+
+  // Calculate stats from database
+  const totalAssets = useMemo(() => {
+    if (!assets) return 100;
+    return assets.usdg_balance;
+  }, [assets]);
+
+  const totalSIM = useMemo(() => {
+    if (!farmerData?.liquidity_positions) return 0;
+    return Object.values(farmerData.liquidity_positions)
+      .reduce((acc, pos) => acc + pos.sim_earned, 0) + (farmerData.total_sim_earned || 0);
+  }, [farmerData]);
+
+  const capitalAllocation = useMemo(() => {
+    if (!farmerData?.liquidity_positions) return [];
+
+    const colors = { GAO: "#8b5cf6", FRUIT: "#ef4444", VEG: "#22c55e", GRAIN: "#f59e0b" };
+    const totalLP = Object.values(farmerData.liquidity_positions)
+      .reduce((acc, pos) => acc + pos.lp_amount, 0);
+
+    return Object.entries(farmerData.liquidity_positions)
+      .filter(([, pos]) => pos.lp_amount > 0)
+      .map(([pair, pos]) => {
+        const symbol = pair.split('/')[0];
+        const value = totalLP > 0 ? Math.round((pos.lp_amount / totalLP) * 100) : 0;
+        return {
+          name: symbol,
+          value,
+          color: colors[symbol as keyof typeof colors] || "#888",
+          amount: `$${(pos.lp_amount * 2).toFixed(2)}` // Rough estimate
+        };
+      });
+  }, [farmerData]);
+
+  // Format activity history
+  const formattedHistory = useMemo(() => {
+    return activityHistory.slice(0, 10).map((activity, index) => ({
+      id: index + 1,
+      time: new Date(activity.created_at).toLocaleString('vi-VN'),
+      action: activity.activity_type === 'add_liquidity' ? 'Nạp thanh khoản'
+        : activity.activity_type === 'stake_lp' ? 'Stake'
+          : activity.activity_type === 'unstake_lp' ? 'Unstake'
+            : activity.activity_type === 'claim_sim' ? 'Thu hoạch'
+              : activity.activity_type === 'plant' ? 'Trồng'
+                : activity.activity_type === 'harvest' ? 'Thu hoạch'
+                  : activity.activity_type,
+      pool: activity.token_type ? `${activity.token_type}/USDG` : '-',
+      sim: activity.activity_type === 'claim_sim' ? activity.amount : 0,
+      status: activity.activity_type === 'claim_sim' || activity.activity_type === 'harvest' ? 'success'
+        : activity.activity_type === 'unstake_lp' ? 'warning'
+          : 'neutral'
+    }));
+  }, [activityHistory]);
 
   const filteredHistory = useMemo(() => {
-    return activityHistory.filter(h =>
+    return formattedHistory.filter(h =>
       h.pool.toLowerCase().includes(searchQuery.toLowerCase()) ||
       h.action.toLowerCase().includes(searchQuery.toLowerCase())
     );
-  }, [searchQuery]);
+  }, [searchQuery, formattedHistory]);
 
-  // Calculate stats
-  const totalSIM = 203.7;
-  const avgAPY = 45.5;
-  const ilScore = 92; // IL Management score (0-100)
+  // Reputation info
+  const reputation = useMemo(() => {
+    if (!assets) return { points: 1000, level: "Tân thủ", nextLevel: 1500, progress: 0 };
+    const points = assets.reputation_points;
+    const level = assets.reputation_level;
+    const nextLevel = points < 1500 ? 1500 : points < 2500 ? 2500 : 5000;
+    return { points, level, nextLevel, progress: (points / nextLevel) * 100 };
+  }, [assets]);
+
+  // Level info
+  const levelInfo = useMemo(() => {
+    if (!assets) return { level: 1, xp: 0, nextXp: 100 };
+    const xp = assets.xp || 0;
+    const level = assets.level || 1;
+    const nextXp = level * 500;
+    return { level, xp, nextXp, progress: (xp / nextXp) * 100 };
+  }, [assets]);
+
+  // Badges
+  const badges = useMemo(() => [
+    { id: 1, emoji: "🌾", name: "Bậc thầy nông dân", desc: "Stake GAO nhiều", unlocked: (farmerData?.total_harvests || 0) > 0 },
+    { id: 2, emoji: "⚖️", name: "Chuyên gia cân bằng Pool", desc: "Nạp thanh khoản đúng lúc", unlocked: Object.keys(farmerData?.liquidity_positions || {}).length > 0 },
+    { id: 3, emoji: "💎", name: "HODLer kiên định", desc: "Stake > 30 ngày", unlocked: false },
+    { id: 4, emoji: "🔥", name: "Người tiên phong", desc: "Tham gia từ đầu", unlocked: false },
+  ], [farmerData]);
+
+  // Dynamic chart data based on actual values
+  const assetGrowthData = useMemo(() => {
+    // For new accounts, show just the starting point
+    if (totalAssets <= 100) {
+      return [
+        { date: "Bắt đầu", value: 100, label: "Vốn ban đầu" },
+        { date: "Nay", value: totalAssets, label: "Hiện tại" },
+      ];
+    }
+    // Generate simple growth chart
+    return [
+      { date: "Bắt đầu", value: 100, label: "Vốn ban đầu" },
+      { date: "Nay", value: totalAssets, label: "Hiện tại" },
+    ];
+  }, [totalAssets]);
+
+  // Dynamic P/L data
+  const profitHistory = useMemo(() => {
+    const profit = totalAssets - 100;
+    if (profit <= 0) {
+      return [{ date: "Nay", pl: 0, event: null }];
+    }
+    return [
+      { date: "Bắt đầu", pl: 0, event: null },
+      { date: "Nay", pl: profit, event: null },
+    ];
+  }, [totalAssets]);
+
+  if (isLoading) {
+    return (
+      <DashboardLayout mode="farmer">
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout mode="farmer">
@@ -136,21 +236,21 @@ const FarmerPortfolio = () => {
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Tổng giá trị tài sản</p>
-                    <p className="text-4xl font-bold gradient-text">$2,850.00</p>
+                    <p className="text-4xl font-bold gradient-text">${totalAssets.toFixed(2)}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 text-success mb-4">
+                <div className="flex items-center gap-2 text-muted-foreground mb-4">
                   <TrendingUp className="w-4 h-4" />
-                  <span className="text-sm font-medium">+12.5% so với tuần trước</span>
+                  <span className="text-sm font-medium">Tài khoản mới</span>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="p-3 rounded-xl bg-muted/30">
                     <p className="text-xs text-muted-foreground">Vốn ban đầu</p>
-                    <p className="text-lg font-bold">$1,250.00</p>
+                    <p className="text-lg font-bold">$100.00</p>
                   </div>
                   <div className="p-3 rounded-xl bg-success/10">
                     <p className="text-xs text-muted-foreground">Tổng lợi nhuận</p>
-                    <p className="text-lg font-bold text-success">+$1,600.00</p>
+                    <p className="text-lg font-bold text-success">+${(totalAssets - 100).toFixed(2)}</p>
                   </div>
                 </div>
               </div>
@@ -161,8 +261,8 @@ const FarmerPortfolio = () => {
                   <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
                     Biểu đồ Tăng trưởng Tài sản
                   </h3>
-                  <Badge className="bg-success/20 text-success border-success/20">
-                    +128% từ đầu
+                  <Badge className="bg-muted/20 text-muted-foreground border-muted/20">
+                    {totalAssets > 100 ? `+${(((totalAssets - 100) / 100) * 100).toFixed(0)}% từ đầu` : 'Bắt đầu'}
                   </Badge>
                 </div>
                 <div className="h-[200px] w-full">
@@ -243,9 +343,9 @@ const FarmerPortfolio = () => {
                     <p className="text-3xl font-bold gradient-text">{totalSIM} SIM</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 text-success text-sm">
+                <div className="flex items-center gap-2 text-muted-foreground text-sm">
                   <ArrowUpRight className="w-4 h-4" />
-                  <span>+15.2 SIM tuần này</span>
+                  <span>+0 SIM tuần này</span>
                 </div>
               </div>
 
@@ -257,11 +357,11 @@ const FarmerPortfolio = () => {
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">APY Trung bình</p>
-                    <p className="text-3xl font-bold text-success">{avgAPY}%</p>
+                    <p className="text-3xl font-bold text-success">{Object.keys(farmerData?.liquidity_positions || {}).length > 0 ? '45.5%' : '0%'}</p>
                   </div>
                 </div>
                 <div className="text-sm text-muted-foreground">
-                  Dựa trên 3 Pool đang Stake
+                  Dựa trên {Object.keys(farmerData?.liquidity_positions || {}).length} Pool đang Stake
                 </div>
               </div>
 
@@ -273,13 +373,13 @@ const FarmerPortfolio = () => {
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Chỉ số an toàn vốn</p>
-                    <p className="text-3xl font-bold text-blue-500">{ilScore}/100</p>
+                    <p className="text-3xl font-bold text-blue-500">{Object.keys(farmerData?.liquidity_positions || {}).length > 0 ? '92' : '0'}/100</p>
                   </div>
                 </div>
-                <Progress value={ilScore} className="h-2 mb-2" />
-                <div className="flex items-center gap-1 text-sm text-success">
-                  <span className="w-2 h-2 rounded-full bg-success animate-pulse" />
-                  <span>IL thấp - An toàn</span>
+                <Progress value={Object.keys(farmerData?.liquidity_positions || {}).length > 0 ? 92 : 0} className="h-2 mb-2" />
+                <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                  <span className="w-2 h-2 rounded-full bg-muted-foreground" />
+                  <span>{Object.keys(farmerData?.liquidity_positions || {}).length > 0 ? 'IL thấp - An toàn' : 'Chưa có vị thế'}</span>
                 </div>
               </div>
             </div>
@@ -447,16 +547,16 @@ const FarmerPortfolio = () => {
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground uppercase font-bold">Cấp độ</p>
-                      <p className="text-2xl font-bold">Level 5</p>
+                      <p className="text-2xl font-bold">Level {levelInfo.level}</p>
                     </div>
                   </div>
                   <div className="text-right">
                     <p className="text-xs text-muted-foreground">XP</p>
-                    <p className="text-sm font-bold">2,450 / 3,000</p>
+                    <p className="text-sm font-bold">{levelInfo.xp.toLocaleString()} / {levelInfo.nextXp.toLocaleString()}</p>
                   </div>
                 </div>
-                <Progress value={82} className="h-2 mb-2" />
-                <p className="text-xs text-muted-foreground">Còn 550 XP để lên Level 6</p>
+                <Progress value={levelInfo.progress || 0} className="h-2 mb-2" />
+                <p className="text-xs text-muted-foreground">Còn {levelInfo.nextXp - levelInfo.xp} XP để lên Level {levelInfo.level + 1}</p>
               </div>
 
               {/* Reputation Score */}
@@ -467,15 +567,15 @@ const FarmerPortfolio = () => {
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground uppercase font-bold">Điểm uy tín</p>
-                    <p className="text-2xl font-bold gradient-text">1,850 điểm</p>
+                    <p className="text-2xl font-bold gradient-text">{reputation.points.toLocaleString()} điểm</p>
                   </div>
                 </div>
-                <p className="text-sm text-muted-foreground mb-2">Hạng: <span className="text-primary font-semibold">Nông dân Bạc</span></p>
+                <p className="text-sm text-muted-foreground mb-2">Hạng: <span className="text-primary font-semibold">{reputation.level}</span></p>
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">Tiến trình lên Vàng</span>
-                  <span className="font-bold">1,850 / 2,500</span>
+                  <span className="text-muted-foreground">Tiến trình lên hạng tiếp theo</span>
+                  <span className="font-bold">{reputation.points.toLocaleString()} / {reputation.nextLevel.toLocaleString()}</span>
                 </div>
-                <Progress value={74} className="h-1.5 mt-1" />
+                <Progress value={reputation.progress || 0} className="h-1.5 mt-1" />
               </div>
 
               {/* Badges */}
@@ -486,8 +586,8 @@ const FarmerPortfolio = () => {
                     <div
                       key={badge.id}
                       className={`p-2 rounded-lg text-center transition-all ${badge.unlocked
-                          ? "bg-primary/10 border border-primary/30"
-                          : "bg-muted/50 opacity-50"
+                        ? "bg-primary/10 border border-primary/30"
+                        : "bg-muted/50 opacity-50"
                         }`}
                     >
                       <span className="text-2xl">{badge.emoji}</span>

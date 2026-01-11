@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ import {
   Sparkles,
   BarChart3,
   Calculator,
+  Loader2,
 } from "lucide-react";
 import {
   LineChart,
@@ -52,14 +53,22 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  getUserAssets,
+  getTraderData,
+  updateTraderData,
+  updateUserAssets,
+  recordSwap,
+  type TraderData,
+} from "@/services/gameDataService";
 
-// Token data
-const tokensData = [
-  { symbol: "USDG", name: "USD Game", balance: 350.0, color: "#3b82f6", image: "/tokens/usdg.png" },
-  { symbol: "GAO", name: "Gạo Token", balance: 45.0, trend: "up", color: "#8b5cf6", image: "/tokens/gao_new.png" },
-  { symbol: "FRUIT", name: "Trái cây Token", balance: 30.0, trend: "up", color: "#ef4444", image: "/tokens/fruit.png" },
-  { symbol: "VEG", name: "Rau củ Token", balance: 25.0, trend: "down", color: "#22c55e", image: "/tokens/veg.png" },
-  { symbol: "GRAIN", name: "Ngũ cốc Token", balance: 20.0, trend: "stable", color: "#f59e0b", image: "/tokens/grain.png" },
+// Default token data (will be updated from database)
+const defaultTokens = [
+  { symbol: "USDG", name: "USD Game", balance: 100.0, color: "#3b82f6", image: "/tokens/usdg.png" },
+  { symbol: "GAO", name: "Gạo Token", balance: 0, trend: "up", color: "#8b5cf6", image: "/tokens/gao_new.png" },
+  { symbol: "FRUIT", name: "Trái cây Token", balance: 0, trend: "up", color: "#ef4444", image: "/tokens/fruit.png" },
+  { symbol: "VEG", name: "Rau củ Token", balance: 0, trend: "down", color: "#22c55e", image: "/tokens/veg.png" },
+  { symbol: "GRAIN", name: "Ngũ cốc Token", balance: 0, trend: "stable", color: "#f59e0b", image: "/tokens/grain.png" },
 ];
 
 // Pool data with reserves for AMM calculation
@@ -90,6 +99,11 @@ const priceHistory = [
 const TraderSwap = () => {
   const navigate = useNavigate();
 
+  // Loading state
+  const [isLoading, setIsLoading] = useState(true);
+  const [tokensData, setTokensData] = useState(defaultTokens);
+  const [traderData, setTraderData] = useState<TraderData | null>(null);
+
   // Form state
   const [fromToken, setFromToken] = useState("USDG");
   const [toToken, setToToken] = useState("GAO");
@@ -103,6 +117,68 @@ const TraderSwap = () => {
   const [showPoolDetails, setShowPoolDetails] = useState(false);
   const [showFormulaDialog, setShowFormulaDialog] = useState(false);
   const [isSwapping, setIsSwapping] = useState(false);
+
+  // Load data from Supabase
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [assets, trader] = await Promise.all([
+          getUserAssets(),
+          getTraderData()
+        ]);
+
+        if (assets && trader) {
+          setTraderData(trader);
+
+          // Update tokens with actual balances
+          setTokensData(prev => prev.map(token => {
+            if (token.symbol === "USDG") {
+              return { ...token, balance: assets.usdg_balance };
+            }
+            const tokenBalance = trader.token_balances[token.symbol];
+            return {
+              ...token,
+              balance: tokenBalance?.amount || 0
+            };
+          }));
+        }
+      } catch (error) {
+        console.error('Error loading swap data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadData();
+  }, []);
+
+  // Get pool data from trader's pool_state
+  const poolsData = useMemo(() => {
+    if (!traderData?.pool_state) {
+      return {
+        "GAO": { reserveIn: 10000, reserveOut: 10000, volume: 125000, isImbalanced: false, trend: "up" },
+        "FRUIT": { reserveIn: 10000, reserveOut: 10000, volume: 98000, isImbalanced: false, trend: "up" },
+        "VEG": { reserveIn: 10000, reserveOut: 10000, volume: 45000, isImbalanced: true, trend: "down" },
+        "GRAIN": { reserveIn: 10000, reserveOut: 10000, volume: 67000, isImbalanced: false, trend: "stable" },
+      };
+    }
+
+    const pools: Record<string, { reserveIn: number; reserveOut: number; volume: number; isImbalanced: boolean; trend: string }> = {};
+
+    Object.entries(traderData.pool_state).forEach(([pair, state]) => {
+      const tokenSymbol = pair.split('/')[0];
+      const ratio = state.token_reserve / (state.token_reserve + state.usdg_reserve);
+      pools[tokenSymbol] = {
+        reserveIn: state.usdg_reserve,
+        reserveOut: state.token_reserve,
+        volume: Math.floor(Math.random() * 100000) + 50000,
+        isImbalanced: ratio < 0.4 || ratio > 0.6,
+        trend: ratio > 0.5 ? "up" : ratio < 0.5 ? "down" : "stable"
+      };
+    });
+
+    return pools;
+  }, [traderData]);
 
   // Get token info
   const fromTokenInfo = tokensData.find(t => t.symbol === fromToken)!;
@@ -171,18 +247,77 @@ const TraderSwap = () => {
   };
 
   // Execute swap
-  const handleExecuteSwap = () => {
+  const handleExecuteSwap = async () => {
     setIsSwapping(true);
     setShowConfirmDialog(false);
 
-    setTimeout(() => {
-      setIsSwapping(false);
-      if (Math.random() > 0.2) {
-        setShowSuccessDialog(true);
-      } else {
-        setShowFailDialog(true);
+    try {
+      // Simulate processing time
+      await new Promise(resolve => setTimeout(resolve, 1500));
+
+      // Update balances
+      const newFromBalance = fromTokenInfo.balance - swapDetails.dx;
+      const newToBalance = toTokenInfo.balance + swapDetails.outputAfterFee;
+
+      // Update pool state
+      const poolPair = `${toToken}/USDG`;
+      const newPoolState = { ...traderData?.pool_state };
+      if (newPoolState[poolPair]) {
+        newPoolState[poolPair] = {
+          ...newPoolState[poolPair],
+          usdg_reserve: swapDetails.newReserveIn,
+          token_reserve: swapDetails.newReserveOut
+        };
       }
-    }, 2000);
+
+      // Update token balances
+      const newTokenBalances = { ...traderData?.token_balances };
+      if (fromToken === "USDG") {
+        // Swapping USDG to token - update USDG balance and increase token
+        newTokenBalances[toToken] = {
+          amount: newToBalance,
+          cost_basis: (newTokenBalances[toToken]?.cost_basis || 0) + swapDetails.dx
+        };
+
+        // Save to database
+        await updateUserAssets({ usdg_balance: newFromBalance });
+        await updateTraderData({
+          token_balances: newTokenBalances,
+          pool_state: newPoolState,
+          total_trades: (traderData?.total_trades || 0) + 1,
+          total_volume: (traderData?.total_volume || 0) + swapDetails.dx
+        });
+      }
+
+      // Record swap history
+      await recordSwap(
+        fromToken,
+        toToken,
+        swapDetails.dx,
+        swapDetails.outputAfterFee,
+        swapDetails.priceImpact,
+        0 // profit/loss to be calculated later
+      );
+
+      // Update local state
+      setTokensData(prev => prev.map(token => {
+        if (token.symbol === fromToken) {
+          return { ...token, balance: newFromBalance };
+        }
+        if (token.symbol === toToken) {
+          return { ...token, balance: newToBalance };
+        }
+        return token;
+      }));
+
+      setIsSwapping(false);
+      setShowSuccessDialog(true);
+      setAmount(""); // Reset amount
+    } catch (error) {
+      console.error('Swap error:', error);
+      setIsSwapping(false);
+      setShowFailDialog(true);
+    }
   };
 
   // Get warning messages
