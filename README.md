@@ -1,73 +1,85 @@
-# Welcome to your Lovable project
+# 🌾 Rise of Ledger: Utopia World
 
-## Project info
+![Utopia World](/public/logo-mascot.png)
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+**Trải nghiệm thế giới GameFi – nơi nông nghiệp truyền thống được tái định hình bởi tài chính phi tập trung.**
 
-## How can I edit this code?
+## 📖 Giới thiệu
 
-There are several ways of editing your application.
+Rise of Ledger: Utopia World là một ứng dụng mô phỏng GameFi giáo dục, nơi người chơi có thể trải nghiệm các khái niệm DeFi (Tài chính phi tập trung) thông qua gameplay nông nghiệp thú vị.
 
-**Use Lovable**
+### 🎭 Hai vai trò chính
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+| 🌾 Farmer | 📊 Trader |
+|-----------|-----------|
+| Người sản xuất và cung cấp thanh khoản | Người phân tích và giao dịch thị trường |
+| ✓ Trồng trọt & sản xuất | ✓ Phân tích tín hiệu thị trường |
+| ✓ Đưa sản phẩm vào pool (stake/farm) | ✓ Swap token theo nhu cầu |
+| ✓ Theo dõi thị trường & cân bằng pool | ✓ Quản lý rủi ro & tối ưu lợi nhuận |
 
-Changes made via Lovable will be committed automatically to this repo.
+## ✨ Tính năng chính
 
-**Use your preferred IDE**
+- 🔄 **Giao dịch DEX** - Mua bán nông sản trên sàn phi tập trung với thanh khoản tức thì
+- 📈 **Đầu tư & Canh tác lợi nhuận** - Cung cấp thanh khoản, nhận LP Token và stake để kiếm SIM
+- 🎁 **Đổi thưởng thực** - Tích lũy điểm uy tín để đổi lấy phần thưởng đặc biệt
+- 🌱 **Nông trại ảo** - Trồng trọt, thu hoạch và bán nông sản
+- 💱 **AMM Swap** - Giao dịch token với công thức x × y = k
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+## 🚀 Cài đặt
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+```bash
+# Clone repository
+git clone https://github.com/nnqn2006/rise-of-utopia-ui.git
 
-Follow these steps:
+# Di chuyển vào thư mục
+cd rise-of-utopia-ui
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+# Cài đặt dependencies
+npm install
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Chạy development server
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+## 🛠️ Công nghệ sử dụng
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+- **Frontend**: React 18 + TypeScript
+- **Styling**: Tailwind CSS + shadcn/ui
+- **Build Tool**: Vite
+- **Database**: Supabase (PostgreSQL)
+- **Charts**: Recharts
+- **Routing**: React Router DOM
 
-**Use GitHub Codespaces**
+## 📁 Cấu trúc thư mục
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+```
+src/
+├── components/     # UI components
+│   ├── ui/         # shadcn/ui components
+│   └── layout/     # Layout components
+├── pages/          # Page components
+│   ├── farmer/     # Farmer interface pages
+│   └── trader/     # Trader interface pages
+├── services/       # API & data services
+├── lib/            # Utilities
+└── hooks/          # Custom hooks
+```
 
-## What technologies are used for this project?
+## 🎮 Tài sản tân thủ
 
-This project is built with:
+Khi bắt đầu chơi, bạn sẽ nhận được:
+- 💰 **100 USDG** - Số dư khởi điểm
+- 🗺️ **100 m²** - Diện tích đất
+- ⭐ **1,000 điểm** - Uy tín ban đầu
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## 🌐 Demo
 
-## How can I deploy this project?
+- **Production**: [Vercel Deployment](https://rise-of-utopia-ui.vercel.app)
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+## 📝 License
 
-## Can I connect a custom domain to my Lovable project?
+MIT License - Dự án này được phát triển cho mục đích học tập và mô phỏng.
 
-Yes, you can!
+---
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+**© 2024 Rise of Ledger Utopia. Ứng dụng mô phỏng để học tập.**
