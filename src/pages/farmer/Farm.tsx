@@ -166,6 +166,11 @@ const FarmerFarm = () => {
     newFarmPlots?: FarmPlot[],
     newBalance?: number
   ) => {
+    console.log('=== saveToSupabase called ===');
+    console.log('newSeedWarehouse:', newSeedWarehouse);
+    console.log('newFarmPlots:', newFarmPlots);
+    console.log('newBalance:', newBalance);
+
     try {
       // Save farmer data
       const updates: Record<string, unknown> = {};
@@ -193,13 +198,17 @@ const FarmerFarm = () => {
         }));
       }
 
+      console.log('Updates to send:', updates);
+
       if (Object.keys(updates).length > 0) {
-        await updateFarmerData(updates as never);
+        const result = await updateFarmerData(updates as never);
+        console.log('updateFarmerData result:', result);
       }
 
       // Save balance
       if (newBalance !== undefined) {
-        await updateUserAssets({ usdg_balance: newBalance });
+        const balanceResult = await updateUserAssets({ usdg_balance: newBalance });
+        console.log('updateUserAssets result:', balanceResult);
       }
     } catch (error) {
       console.error('Error saving to Supabase:', error);

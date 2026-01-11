@@ -86,7 +86,12 @@ export async function getUserAssets(): Promise<UserAssets | null> {
 
 export async function updateUserAssets(updates: Partial<UserAssets>): Promise<boolean> {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return false;
+    if (!user) {
+        console.error('updateUserAssets: No user logged in!');
+        return false;
+    }
+
+    console.log('updateUserAssets: Saving for user', user.id, 'with updates:', updates);
 
     const { error } = await supabase
         .from('user_assets')
@@ -98,6 +103,7 @@ export async function updateUserAssets(updates: Partial<UserAssets>): Promise<bo
         return false;
     }
 
+    console.log('updateUserAssets: Success!');
     return true;
 }
 
