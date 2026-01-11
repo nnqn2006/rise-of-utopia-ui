@@ -51,6 +51,8 @@ const Landing = () => {
               className="w-48 h-48 mx-auto mb-6 rounded-2xl object-cover shadow-2xl"
             />
             <h1 className="text-5xl md:text-6xl font-bold mb-4">
+              <span className="text-foreground text-3xl md:text-4xl">Rise of Ledger</span>
+              <br />
               <span className="bg-gradient-to-r from-yellow-400 via-orange-500 to-green-500 bg-clip-text text-transparent">Utopia World</span>
             </h1>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
