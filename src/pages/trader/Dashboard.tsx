@@ -309,10 +309,10 @@ const TraderDashboard = () => {
                 <div>
                   <p className="text-sm text-muted-foreground">Lợi nhuận/Lỗ</p>
                   <p className="text-2xl font-bold text-success">
-                    {stats.profitLoss >= 0 ? '+' : ''}${stats.profitLoss.toFixed(2)}
+                    {(stats.profitLoss || 0) >= 0 ? '+' : ''}${(stats.profitLoss || 0).toFixed(2)}
                   </p>
                   <p className="text-xs text-success">
-                    {stats.profitLossPercent >= 0 ? '+' : ''}{stats.profitLossPercent.toFixed(1)}%
+                    {(stats.profitLossPercent || 0) >= 0 ? '+' : ''}{(stats.profitLossPercent || 0).toFixed(1)}%
                   </p>
                 </div>
               </div>

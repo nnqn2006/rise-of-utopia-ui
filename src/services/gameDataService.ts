@@ -29,6 +29,7 @@ const getDefaultDemoData = () => ({
         },
         total_trades: 47,
         total_volume: 12500,
+        total_profit_loss: 156.5,
         win_rate: 65.5,
         best_trade: { token: 'GAO', profit: 125, date: new Date(Date.now() - 86400000).toISOString() },
         worst_trade: { token: 'VEG', profit: -35, date: new Date(Date.now() - 172800000).toISOString() },
