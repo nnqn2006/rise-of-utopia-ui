@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
@@ -9,6 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import {
   Coins,
   Wallet,
@@ -21,11 +22,10 @@ import {
   TrendingUp,
   TrendingDown,
   Loader2,
+  AlertTriangle,
 } from "lucide-react";
 import { Sparkline, AnimatedCounter } from "@/components/dashboard";
 import {
-  LineChart,
-  Line,
   XAxis,
   YAxis,
   Tooltip,
@@ -33,34 +33,48 @@ import {
   ComposedChart,
   Bar,
   Legend,
+  Line,
 } from "recharts";
 import {
   getUserAssets,
   getFarmerData,
 } from "@/services/gameDataService";
-
-// Price data for all 4 tokens (same as Trader Dashboard)
-const priceData = [
-  { time: "09:00", GAO: 3.2, FRUIT: 4.1, VEG: 2.3, GRAIN: 1.9, volume: 12000 },
-  { time: "10:00", GAO: 3.4, FRUIT: 4.0, VEG: 2.25, GRAIN: 1.85, volume: 15000 },
-  { time: "11:00", GAO: 3.3, FRUIT: 4.3, VEG: 2.2, GRAIN: 1.82, volume: 18000 },
-  { time: "12:00", GAO: 3.6, FRUIT: 4.2, VEG: 2.18, GRAIN: 1.88, volume: 22000 },
-  { time: "13:00", GAO: 3.5, FRUIT: 4.5, VEG: 2.15, GRAIN: 1.85, volume: 19000 },
-  { time: "14:00", GAO: 3.8, FRUIT: 4.4, VEG: 2.12, GRAIN: 1.83, volume: 25000 },
-  { time: "15:00", GAO: 3.7, FRUIT: 4.6, VEG: 2.15, GRAIN: 1.85, volume: 28000 },
-];
-
-// Pool data for each pool option
-const poolData: Record<string, { ratio: number; emoji: string; name: string; status: string }> = {
-  "GAO/USDG": { ratio: 54.5, emoji: "🌾", name: "GAO", status: "Cân bằng" },
-  "FRUIT/USDG": { ratio: 50.0, emoji: "🍎", name: "FRUIT", status: "Cân bằng" },
-  "VEG/USDG": { ratio: 35.0, emoji: "🥬", name: "VEG", status: "Lệch" },
-  "GRAIN/USDG": { ratio: 52.0, emoji: "🌽", name: "GRAIN", status: "Cân bằng" },
-};
+import {
+  getCurrentPrices,
+  subscribeToPriceUpdates,
+  startPriceEngine,
+  getChartData,
+  type PriceData,
+} from "@/services/priceEngine";
+import {
+  calculateImpermanentLossPercent,
+  getILRiskLevel,
+  getILRiskColor,
+  getPoolApy,
+  calculateSimPerHour,
+  calculatePoolRatio,
+  getPoolStatus,
+} from "@/services/defiCalculator";
 
 const FarmerDashboard = () => {
   const [selectedPool, setSelectedPool] = useState("GAO/USDG");
   const [isLoading, setIsLoading] = useState(true);
+
+  // Real-time price data
+  const [prices, setPrices] = useState<Record<string, PriceData>>({});
+  const [priceChartData, setPriceChartData] = useState<Array<{
+    time: string;
+    GAO: number;
+    FRUIT: number;
+    VEG: number;
+    GRAIN: number;
+    volume: number;
+  }>>([]);
+  const [ilWarning, setIlWarning] = useState<{ show: boolean; level: string; percent: number }>({
+    show: false,
+    level: 'safe',
+    percent: 0,
+  });
 
   // Stats from database
   const [stats, setStats] = useState({
@@ -70,6 +84,7 @@ const FarmerDashboard = () => {
     level: 1,
     xp: 0,
     nextXp: 500,
+    totalStakedLp: 0,
   });
 
   const [poolData, setPoolData] = useState<Record<string, { ratio: number; emoji: string; name: string; status: string }>>({
@@ -78,6 +93,90 @@ const FarmerDashboard = () => {
     "VEG/USDG": { ratio: 50.0, emoji: "🥬", name: "VEG", status: "Cân bằng" },
     "GRAIN/USDG": { ratio: 50.0, emoji: "🌽", name: "GRAIN", status: "Cân bằng" },
   });
+
+  // Entry prices for IL calculation
+  const [entryPrices, setEntryPrices] = useState<Record<string, number>>({
+    GAO: 3.5,
+    FRUIT: 4.2,
+    VEG: 2.2,
+    GRAIN: 1.85,
+  });
+
+  // Initialize price engine and subscribe to updates
+  useEffect(() => {
+    // Start the price engine
+    startPriceEngine();
+
+    // Get initial prices
+    const initialPrices = getCurrentPrices();
+    setPrices(initialPrices);
+
+    // Get chart data from history, or create simulated initial data
+    const chartData = getChartData(24);
+
+    // Always create chart data with at least 7 points
+    const now = new Date();
+    const baseGao = initialPrices.GAO?.price || 3.5;
+    const baseFruit = initialPrices.FRUIT?.price || 4.2;
+    const baseVeg = initialPrices.VEG?.price || 2.2;
+    const baseGrain = initialPrices.GRAIN?.price || 1.85;
+
+    // Generate 7 hours of simulated price data with realistic fluctuations
+    const initialChartData = [];
+    for (let i = 6; i >= 0; i--) {
+      const time = new Date(now.getTime() - i * 60 * 60 * 1000);
+      // Add small random variations (±5%)
+      const variation = (i: number, base: number) => {
+        const noise = (Math.random() - 0.5) * 0.1; // ±5%
+        const trend = (6 - i) * 0.01; // slight upward trend
+        return Math.round((base * (1 + noise + trend)) * 100) / 100;
+      };
+
+      initialChartData.push({
+        time: time.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
+        GAO: variation(i, baseGao),
+        FRUIT: variation(i, baseFruit),
+        VEG: variation(i, baseVeg),
+        GRAIN: variation(i, baseGrain),
+        volume: Math.floor(Math.random() * 20000) + 10000,
+      });
+    }
+
+    // Use existing chart data if available, otherwise use simulated data
+    if (chartData.length >= 5) {
+      setPriceChartData(chartData);
+    } else {
+      setPriceChartData(initialChartData);
+    }
+
+    // Subscribe to price updates
+    const unsubscribe = subscribeToPriceUpdates((newPrices) => {
+      setPrices(newPrices);
+
+      // Update chart data
+      const newChartData = getChartData(24);
+      if (newChartData.length >= 5) {
+        setPriceChartData(newChartData);
+      }
+
+      // Check IL for selected pool
+      const tokenSymbol = selectedPool.split('/')[0];
+      const entryPrice = entryPrices[tokenSymbol] || 3.5;
+      const currentPrice = newPrices[tokenSymbol]?.price || entryPrice;
+      const ilPercent = calculateImpermanentLossPercent(entryPrice, currentPrice);
+      const riskLevel = getILRiskLevel(ilPercent);
+
+      setIlWarning({
+        show: ilPercent > 2,
+        level: riskLevel,
+        percent: ilPercent,
+      });
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [selectedPool, entryPrices]);
 
   // Load data from Supabase
   useEffect(() => {
@@ -93,14 +192,15 @@ const FarmerDashboard = () => {
           const xp = assets.xp || 0;
           const nextXp = level * 500;
 
-          setStats({
+          setStats(prev => ({
+            ...prev,
             totalAssets: assets.usdg_balance,
             workingCapital: assets.usdg_balance,
             reputationScore: assets.reputation_points,
             level,
             xp,
             nextXp,
-          });
+          }));
         }
 
         if (farmer?.pool_state) {
@@ -108,18 +208,25 @@ const FarmerDashboard = () => {
 
           Object.entries(farmer.pool_state).forEach(([pair, state]) => {
             const tokenSymbol = pair.split('/')[0];
-            const ratio = state.token_reserve / (state.token_reserve + state.usdg_reserve) * 100;
+            const ratio = calculatePoolRatio(state.token_reserve, state.usdg_reserve);
             const emoji = tokenSymbol === 'GAO' ? '🌾' : tokenSymbol === 'FRUIT' ? '🍎' : tokenSymbol === 'VEG' ? '🥬' : '🌽';
+            const poolStatus = getPoolStatus(ratio);
 
             newPoolData[pair] = {
               ratio,
               emoji,
               name: tokenSymbol,
-              status: ratio >= 45 && ratio <= 55 ? 'Cân bằng' : 'Lệch'
+              status: poolStatus.status
             };
           });
 
           setPoolData(newPoolData);
+        }
+
+        if (farmer?.liquidity_positions) {
+          const totalStaked = Object.values(farmer.liquidity_positions)
+            .reduce((acc, pos) => acc + pos.staked_lp, 0);
+          setStats(prev => ({ ...prev, totalStakedLp: totalStaked }));
         }
       } catch (error) {
         console.error('Error loading farmer dashboard:', error);
@@ -131,15 +238,37 @@ const FarmerDashboard = () => {
     loadData();
   }, []);
 
-  // Mock data for UI
+  // Generate dynamic trading signals based on price data
+  const tradingSignals = useCallback(() => {
+    const signals: string[] = [];
+
+    Object.entries(prices).forEach(([symbol, data]) => {
+      if (data.change24h > 5) {
+        signals.push(`🔥 ${symbol}/USDG +${data.change24h.toFixed(1)}%`);
+      } else if (data.change24h < -5) {
+        signals.push(`📉 ${symbol}/USDG ${data.change24h.toFixed(1)}%`);
+      }
+    });
+
+    // Add IL warning if exists
+    if (ilWarning.show) {
+      signals.push(`⚠️ IL ${selectedPool}: ${ilWarning.percent.toFixed(2)}%`);
+    }
+
+    // Add APY info
+    const apy = getPoolApy(selectedPool) * 100;
+    signals.push(`💰 APY ${selectedPool.split('/')[0]}: ${apy.toFixed(1)}%`);
+
+    // Add SIM rate
+    if (stats.totalStakedLp > 0) {
+      const simPerHour = calculateSimPerHour(stats.totalStakedLp, getPoolApy(selectedPool));
+      signals.push(`⚡ +${simPerHour.toFixed(4)} SIM/giờ`);
+    }
+
+    return signals.length > 0 ? signals : ["📊 Đang cập nhật..."];
+  }, [prices, ilWarning, selectedPool, stats.totalStakedLp]);
+
   const netWorthTrend = [stats.totalAssets * 0.94, stats.totalAssets * 0.97, stats.totalAssets * 0.96, stats.totalAssets * 0.99, stats.totalAssets * 0.98, stats.totalAssets * 0.99, stats.totalAssets];
-  const tradingSignals = [
-    "🔥 GAO/USDG +150%",
-    "📈 RSI GAO quá bán",
-    "⚡ Pool FRUIT sắp hết",
-    "🌾 Thời tiết +12%",
-    "💰 APY GAO: 45%",
-  ];
 
   const currentPool = poolData[selectedPool] || poolData["GAO/USDG"];
   const poolRatio = currentPool.ratio;
@@ -209,7 +338,7 @@ const FarmerDashboard = () => {
               <span className="text-xs font-semibold text-primary">Tín hiệu</span>
               <div className="flex-1 overflow-hidden">
                 <div className="animate-marquee whitespace-nowrap">
-                  {tradingSignals.map((s, i) => (
+                  {tradingSignals().map((s, i) => (
                     <span key={i} className="mx-3 text-xs">{s}</span>
                   ))}
                 </div>
@@ -362,7 +491,7 @@ const FarmerDashboard = () => {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={250}>
-              <ComposedChart data={priceData}>
+              <ComposedChart data={priceChartData}>
                 <XAxis dataKey="time" stroke="#888" fontSize={12} />
                 <YAxis yAxisId="left" stroke="#888" domain={[1, 5]} fontSize={12} />
                 <YAxis yAxisId="right" orientation="right" stroke="#888" fontSize={12} />

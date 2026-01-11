@@ -308,3 +308,196 @@ export async function getAllUserData() {
 
     return { assets, trader, farmer };
 }
+
+// =====================================================
+// PRICE HISTORY & REAL-TIME TRACKING
+// =====================================================
+
+export interface PriceSnapshot {
+    timestamp: string;
+    prices: Record<string, number>;
+}
+
+export async function savePriceSnapshot(prices: Record<string, number>): Promise<boolean> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return false;
+
+    const { error } = await supabase
+        .from('price_history')
+        .insert({
+            user_id: user.id,
+            prices,
+            created_at: new Date().toISOString()
+        });
+
+    if (error) {
+        console.error('Error saving price snapshot:', error);
+        return false;
+    }
+
+    return true;
+}
+
+export async function getPriceHistory(limit = 100): Promise<PriceSnapshot[]> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return [];
+
+    const { data, error } = await supabase
+        .from('price_history')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(limit);
+
+    if (error) {
+        console.error('Error fetching price history:', error);
+        return [];
+    }
+
+    return (data || []).map(row => ({
+        timestamp: row.created_at,
+        prices: row.prices
+    }));
+}
+
+// =====================================================
+// SIM REWARDS ACCUMULATION
+// =====================================================
+
+export async function accumulateSimRewards(simAmount: number, poolPair: string): Promise<boolean> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return false;
+
+    const farmer = await getFarmerData();
+    if (!farmer) return false;
+
+    const currentPosition = farmer.liquidity_positions[poolPair];
+    if (!currentPosition) return false;
+
+    const updatedPosition = {
+        ...currentPosition,
+        sim_earned: currentPosition.sim_earned + simAmount
+    };
+
+    const updatedPositions = {
+        ...farmer.liquidity_positions,
+        [poolPair]: updatedPosition
+    };
+
+    return updateFarmerData({ liquidity_positions: updatedPositions });
+}
+
+export async function batchAccumulateSimRewards(
+    rewards: Array<{ poolPair: string; simAmount: number }>
+): Promise<boolean> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return false;
+
+    const farmer = await getFarmerData();
+    if (!farmer) return false;
+
+    const updatedPositions = { ...farmer.liquidity_positions };
+
+    rewards.forEach(({ poolPair, simAmount }) => {
+        if (updatedPositions[poolPair]) {
+            updatedPositions[poolPair] = {
+                ...updatedPositions[poolPair],
+                sim_earned: updatedPositions[poolPair].sim_earned + simAmount
+            };
+        }
+    });
+
+    return updateFarmerData({ liquidity_positions: updatedPositions });
+}
+
+// =====================================================
+// POSITION TRACKING WITH ENTRY PRICES
+// =====================================================
+
+export interface PositionEntry {
+    poolPair: string;
+    entryPrice: number;
+    entryTimestamp: string;
+    tokenAmount: number;
+    usdgAmount: number;
+}
+
+export async function savePositionEntry(entry: PositionEntry): Promise<boolean> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return false;
+
+    const farmer = await getFarmerData();
+    if (!farmer) return false;
+
+    // Store entry info in farmer_data metadata
+    const currentMetadata: Record<string, PositionEntry> = (farmer as unknown as { position_entries?: Record<string, PositionEntry> }).position_entries || {};
+    currentMetadata[entry.poolPair] = entry;
+
+    const { error } = await supabase
+        .from('farmer_data')
+        .update({
+            position_entries: currentMetadata,
+            updated_at: new Date().toISOString()
+        })
+        .eq('user_id', user.id);
+
+    if (error) {
+        console.error('Error saving position entry:', error);
+        return false;
+    }
+
+    return true;
+}
+
+export async function getPositionEntries(): Promise<Record<string, PositionEntry>> {
+    const farmer = await getFarmerData();
+    if (!farmer) return {};
+
+    return (farmer as never)['position_entries'] || {};
+}
+
+// =====================================================
+// XP AND LEVEL SYSTEM
+// =====================================================
+
+const XP_REWARDS: Record<string, number> = {
+    'buy_seed': 5,
+    'plant': 10,
+    'harvest': 20,
+    'add_liquidity': 30,
+    'stake_lp': 15,
+    'claim_sim': 25,
+};
+
+export async function addXpForAction(actionType: string): Promise<{ newXp: number; newLevel: number; leveledUp: boolean }> {
+    const assets = await getUserAssets();
+    if (!assets) return { newXp: 0, newLevel: 1, leveledUp: false };
+
+    const xpGain = XP_REWARDS[actionType] || 5;
+    const newXp = (assets.xp || 0) + xpGain;
+
+    // Calculate level (500 XP per level)
+    const currentLevel = assets.level || 1;
+    const newLevel = Math.floor(newXp / 500) + 1;
+    const leveledUp = newLevel > currentLevel;
+
+    await updateUserAssets({
+        xp: newXp,
+        level: newLevel,
+        reputation_points: assets.reputation_points + (leveledUp ? 100 : 10)
+    });
+
+    return { newXp, newLevel, leveledUp };
+}
+
+// =====================================================
+// REAL-TIME SYNC UTILITIES
+// =====================================================
+
+export async function syncFarmerDataToDatabase(): Promise<boolean> {
+    const farmer = await getFarmerData();
+    if (!farmer) return false;
+
+    // Just touch the updated_at to trigger sync
+    return updateFarmerData({});
+}

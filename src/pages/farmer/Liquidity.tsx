@@ -1,25 +1,42 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Progress } from "@/components/ui/progress";
-import { Droplets, AlertTriangle, TrendingUp, Coins, Lock, Plus, Minus, Loader2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Droplets, AlertTriangle, TrendingUp, Coins, Lock, Plus, Minus, Loader2, AlertCircle } from "lucide-react";
 import {
   getUserAssets,
   getFarmerData,
   updateFarmerData,
   updateUserAssets,
   recordFarmerActivity,
+  addXpForAction,
+  savePositionEntry,
   type LiquidityPosition,
 } from "@/services/gameDataService";
+import {
+  getCurrentPrices,
+  subscribeToPriceUpdates,
+  getTokenPrice,
+  type PriceData,
+} from "@/services/priceEngine";
+import {
+  calculateImpermanentLossPercent,
+  getILRiskLevel,
+  getILRiskColor,
+  calculateSimPerHour,
+  getPoolApy,
+  POOL_BASE_APY,
+} from "@/services/defiCalculator";
 
-// Default pools data
-const defaultPools = [
-  { pair: "GAO/USDG", tvl: "125,000", apy: "42.5%" },
-  { pair: "FRUIT/USDG", tvl: "85,000", apy: "38.2%" },
-  { pair: "VEG/USDG", tvl: "45,000", apy: "55.8%" },
-  { pair: "GRAIN/USDG", tvl: "67,000", apy: "48.5%" },
+// Default pools data with dynamic APY
+const getPoolsWithApy = () => [
+  { pair: "GAO/USDG", tvl: "125,000", apy: `${(POOL_BASE_APY["GAO/USDG"] * 100).toFixed(1)}%` },
+  { pair: "FRUIT/USDG", tvl: "85,000", apy: `${(POOL_BASE_APY["FRUIT/USDG"] * 100).toFixed(1)}%` },
+  { pair: "VEG/USDG", tvl: "45,000", apy: `${(POOL_BASE_APY["VEG/USDG"] * 100).toFixed(1)}%` },
+  { pair: "GRAIN/USDG", tvl: "67,000", apy: `${(POOL_BASE_APY["GRAIN/USDG"] * 100).toFixed(1)}%` },
 ];
 
 const FarmerLiquidity = () => {
@@ -32,9 +49,99 @@ const FarmerLiquidity = () => {
     "GRAIN/USDG": { lp_amount: 0, staked_lp: 0, sim_earned: 0 },
   });
 
+  // Price and IL tracking
+  const [prices, setPrices] = useState<Record<string, PriceData>>({});
+  const [entryPrices, setEntryPrices] = useState<Record<string, number>>({});
+  const [ilWarnings, setIlWarnings] = useState<Record<string, { percent: number; level: string }>>({});
+
+  // Pools data
+  const [poolsData, setPoolsData] = useState(getPoolsWithApy());
+
   // Input states for each pool
   const [addAmounts, setAddAmounts] = useState<Record<string, { token: string; usdg: string }>>({});
   const [stakeAmounts, setStakeAmounts] = useState<Record<string, string>>({});
+
+  // Interval ref for SIM accumulation
+  const simAccumulationRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Subscribe to price updates for IL calculation
+  useEffect(() => {
+    const initialPrices = getCurrentPrices();
+    setPrices(initialPrices);
+
+    // Set entry prices if not set (for new positions, use current price)
+    const newEntryPrices: Record<string, number> = {};
+    Object.keys(liquidityPositions).forEach(pair => {
+      const symbol = pair.split('/')[0];
+      if (!entryPrices[symbol] && initialPrices[symbol]) {
+        newEntryPrices[symbol] = initialPrices[symbol].price;
+      }
+    });
+    if (Object.keys(newEntryPrices).length > 0) {
+      setEntryPrices(prev => ({ ...prev, ...newEntryPrices }));
+    }
+
+    const unsubscribe = subscribeToPriceUpdates((newPrices) => {
+      setPrices(newPrices);
+
+      // Calculate IL for each pool with positions
+      const warnings: Record<string, { percent: number; level: string }> = {};
+      Object.entries(liquidityPositions).forEach(([pair, pos]) => {
+        if (pos.lp_amount > 0) {
+          const symbol = pair.split('/')[0];
+          const entryPrice = entryPrices[symbol] || newPrices[symbol]?.price || 3.5;
+          const currentPrice = newPrices[symbol]?.price || entryPrice;
+          const ilPercent = calculateImpermanentLossPercent(entryPrice, currentPrice);
+          const riskLevel = getILRiskLevel(ilPercent);
+          warnings[pair] = { percent: ilPercent, level: riskLevel };
+        }
+      });
+      setIlWarnings(warnings);
+    });
+
+    return () => unsubscribe();
+  }, [liquidityPositions, entryPrices]);
+
+  // Real-time SIM accumulation (every 10 seconds)
+  useEffect(() => {
+    const accumulateSim = () => {
+      setLiquidityPositions(prev => {
+        const updated = { ...prev };
+        let hasChanges = false;
+
+        Object.entries(updated).forEach(([pair, pos]) => {
+          if (pos.staked_lp > 0) {
+            // Calculate SIM earned per 10 seconds
+            const apy = getPoolApy(pair);
+            const simPerHour = calculateSimPerHour(pos.staked_lp, apy);
+            const simPer10Sec = simPerHour / 360; // 3600 seconds / 10
+
+            updated[pair] = {
+              ...pos,
+              sim_earned: pos.sim_earned + simPer10Sec,
+            };
+            hasChanges = true;
+          }
+        });
+
+        // Save to database if there are changes (throttled - every minute)
+        if (hasChanges) {
+          // Async save without blocking
+          updateFarmerData({ liquidity_positions: updated }).catch(console.error);
+        }
+
+        return updated;
+      });
+    };
+
+    simAccumulationRef.current = setInterval(accumulateSim, 10000); // Every 10 seconds
+
+    return () => {
+      if (simAccumulationRef.current) {
+        clearInterval(simAccumulationRef.current);
+      }
+    };
+  }, []);
 
   // Load data from Supabase
   useEffect(() => {
@@ -208,10 +315,11 @@ const FarmerLiquidity = () => {
 
         {/* Pool List */}
         <div className="space-y-4">
-          {defaultPools.map((pool, index) => {
+          {poolsData.map((pool, index) => {
             const position = liquidityPositions[pool.pair] || { lp_amount: 0, staked_lp: 0, sim_earned: 0 };
             const amounts = addAmounts[pool.pair] || { token: '', usdg: '' };
             const stakeAmount = stakeAmounts[pool.pair] || '';
+            const ilInfo = ilWarnings[pool.pair];
 
             return (
               <Card key={index} className="glass-card">
