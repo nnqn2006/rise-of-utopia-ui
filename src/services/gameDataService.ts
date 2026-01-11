@@ -218,7 +218,12 @@ export async function getFarmerData(): Promise<FarmerData | null> {
 
 export async function updateFarmerData(updates: Partial<FarmerData>): Promise<boolean> {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return false;
+    if (!user) {
+        console.error('updateFarmerData: No user logged in!');
+        return false;
+    }
+
+    console.log('updateFarmerData: Saving for user', user.id, 'with updates:', updates);
 
     const { error } = await supabase
         .from('farmer_data')
@@ -230,6 +235,7 @@ export async function updateFarmerData(updates: Partial<FarmerData>): Promise<bo
         return false;
     }
 
+    console.log('updateFarmerData: Success!');
     return true;
 }
 
