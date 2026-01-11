@@ -235,9 +235,20 @@ const FarmerFarm = () => {
 
   // Buy seeds
   const handleBuySeed = async () => {
-    if (!selectedSeed) return;
+    console.log('=== handleBuySeed called ===');
+    console.log('selectedSeed:', selectedSeed);
+    console.log('buyQuantity:', buyQuantity);
+    console.log('usdgBalance:', usdgBalance);
+
+    if (!selectedSeed) {
+      console.log('No seed selected, returning');
+      return;
+    }
     const totalCost = selectedSeed.price * buyQuantity;
-    if (totalCost > usdgBalance) return;
+    if (totalCost > usdgBalance) {
+      console.log('Not enough balance:', totalCost, '>', usdgBalance);
+      return;
+    }
 
     const newBalance = usdgBalance - totalCost;
     const newSeeds = {
@@ -245,14 +256,19 @@ const FarmerFarm = () => {
       [selectedSeed.symbol]: (seedWarehouse[selectedSeed.symbol] || 0) + buyQuantity,
     };
 
+    console.log('Setting new balance:', newBalance);
+    console.log('Setting new seeds:', newSeeds);
+
     setUsdgBalance(newBalance);
     setSeedWarehouse(newSeeds);
     setBuyDialogOpen(false);
     setBuyQuantity(1);
 
     // Save to Supabase
+    console.log('Calling saveToSupabase...');
     await saveToSupabase(newSeeds, undefined, undefined, newBalance);
     await recordFarmerActivity('buy_seed', selectedSeed.symbol, buyQuantity, { price: totalCost });
+    console.log('handleBuySeed completed');
   };
 
   // Plant seed

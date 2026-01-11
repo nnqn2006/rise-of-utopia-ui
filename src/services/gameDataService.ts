@@ -1,5 +1,83 @@
 import { supabase } from '@/lib/supabase';
 
+// ====== DEMO MODE - Sử dụng localStorage thay vì Supabase ======
+export const DEMO_MODE = true; // Bật mode demo
+
+const DEMO_STORAGE_KEY = 'utopia_demo_data';
+
+// Default demo data
+const getDefaultDemoData = () => ({
+    user_assets: {
+        usdg_balance: 1000,
+        reputation_points: 1500,
+        level: 5,
+        xp: 2250,
+        total_profit_loss: 250,
+    },
+    farmer_data: {
+        seed_warehouse: { GAO: 10, FRUIT: 5, VEG: 8, GRAIN: 12 },
+        harvest_warehouse: {
+            GAO: { amount: 25, cost_basis: 50 },
+            FRUIT: { amount: 15, cost_basis: 45 },
+            VEG: { amount: 20, cost_basis: 30 },
+            GRAIN: { amount: 30, cost_basis: 35 },
+        },
+        farm_plots: [
+            { id: 1, status: 'empty', seedType: null, plantedAt: null, harvestTime: 120 },
+            { id: 2, status: 'empty', seedType: null, plantedAt: null, harvestTime: 120 },
+            { id: 3, status: 'empty', seedType: null, plantedAt: null, harvestTime: 120 },
+            { id: 4, status: 'empty', seedType: null, plantedAt: null, harvestTime: 120 },
+            { id: 5, status: 'empty', seedType: null, plantedAt: null, harvestTime: 120 },
+            { id: 6, status: 'empty', seedType: null, plantedAt: null, harvestTime: 120 },
+            { id: 7, status: 'empty', seedType: null, plantedAt: null, harvestTime: 120 },
+            { id: 8, status: 'empty', seedType: null, plantedAt: null, harvestTime: 120 },
+        ],
+        pool_state: {
+            'GAO/USDG': { token_reserve: 10000, usdg_reserve: 10000 },
+            'FRUIT/USDG': { token_reserve: 8500, usdg_reserve: 10000 },
+            'VEG/USDG': { token_reserve: 12000, usdg_reserve: 10000 },
+            'GRAIN/USDG': { token_reserve: 9500, usdg_reserve: 10000 },
+        },
+        liquidity_positions: {
+            'GAO/USDG': { lp_amount: 50, staked_lp: 30, sim_earned: 12.5 },
+            'FRUIT/USDG': { lp_amount: 25, staked_lp: 20, sim_earned: 8.3 },
+            'VEG/USDG': { lp_amount: 40, staked_lp: 35, sim_earned: 15.7 },
+            'GRAIN/USDG': { lp_amount: 30, staked_lp: 25, sim_earned: 10.2 },
+        },
+        total_sim_earned: 46.7,
+    },
+    activity_history: [
+        { activity_type: 'harvest', token_type: 'GAO', amount: 5, created_at: new Date().toISOString() },
+        { activity_type: 'stake_lp', token_type: 'GAO', amount: 10, created_at: new Date(Date.now() - 3600000).toISOString() },
+        { activity_type: 'add_liquidity', token_type: 'FRUIT', amount: 25, created_at: new Date(Date.now() - 7200000).toISOString() },
+        { activity_type: 'claim_sim', token_type: 'VEG', amount: 5.5, created_at: new Date(Date.now() - 10800000).toISOString() },
+    ],
+});
+
+// Demo data helper functions
+function getDemoData() {
+    try {
+        const stored = localStorage.getItem(DEMO_STORAGE_KEY);
+        if (stored) {
+            return JSON.parse(stored);
+        }
+    } catch (e) {
+        console.error('Error reading demo data:', e);
+    }
+    // Initialize with default data
+    const defaultData = getDefaultDemoData();
+    saveDemoData(defaultData);
+    return defaultData;
+}
+
+function saveDemoData(data: ReturnType<typeof getDefaultDemoData>) {
+    try {
+        localStorage.setItem(DEMO_STORAGE_KEY, JSON.stringify(data));
+    } catch (e) {
+        console.error('Error saving demo data:', e);
+    }
+}
+
 // =====================================================
 // TYPES
 // =====================================================
@@ -67,6 +145,12 @@ export interface FarmerData {
 // =====================================================
 
 export async function getUserAssets(): Promise<UserAssets | null> {
+    // DEMO MODE: Use localStorage
+    if (DEMO_MODE) {
+        const demoData = getDemoData();
+        return demoData.user_assets as UserAssets;
+    }
+
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
 
@@ -85,6 +169,15 @@ export async function getUserAssets(): Promise<UserAssets | null> {
 }
 
 export async function updateUserAssets(updates: Partial<UserAssets>): Promise<boolean> {
+    // DEMO MODE: Use localStorage
+    if (DEMO_MODE) {
+        const demoData = getDemoData();
+        demoData.user_assets = { ...demoData.user_assets, ...updates };
+        saveDemoData(demoData);
+        console.log('DEMO: updateUserAssets saved:', updates);
+        return true;
+    }
+
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
         console.error('updateUserAssets: No user logged in!');
@@ -205,6 +298,12 @@ export async function getSwapHistory(limit = 50) {
 // =====================================================
 
 export async function getFarmerData(): Promise<FarmerData | null> {
+    // DEMO MODE: Use localStorage
+    if (DEMO_MODE) {
+        const demoData = getDemoData();
+        return demoData.farmer_data as unknown as FarmerData;
+    }
+
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
 
@@ -223,6 +322,15 @@ export async function getFarmerData(): Promise<FarmerData | null> {
 }
 
 export async function updateFarmerData(updates: Partial<FarmerData>): Promise<boolean> {
+    // DEMO MODE: Use localStorage
+    if (DEMO_MODE) {
+        const demoData = getDemoData();
+        demoData.farmer_data = { ...demoData.farmer_data, ...updates };
+        saveDemoData(demoData);
+        console.log('DEMO: updateFarmerData saved:', updates);
+        return true;
+    }
+
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
         console.error('updateFarmerData: No user logged in!');
@@ -267,6 +375,22 @@ export async function recordFarmerActivity(
     amount?: number,
     metadata?: object
 ): Promise<boolean> {
+    // DEMO MODE: Use localStorage
+    if (DEMO_MODE) {
+        const demoData = getDemoData();
+        demoData.activity_history.unshift({
+            activity_type: activityType,
+            token_type: tokenType || '',
+            amount: amount || 0,
+            created_at: new Date().toISOString(),
+        });
+        // Keep only last 20 activities
+        demoData.activity_history = demoData.activity_history.slice(0, 20);
+        saveDemoData(demoData);
+        console.log('DEMO: recordFarmerActivity:', activityType, tokenType, amount);
+        return true;
+    }
+
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return false;
 
@@ -289,6 +413,12 @@ export async function recordFarmerActivity(
 }
 
 export async function getFarmerActivityHistory(limit = 50) {
+    // DEMO MODE: Use localStorage
+    if (DEMO_MODE) {
+        const demoData = getDemoData();
+        return demoData.activity_history.slice(0, limit);
+    }
+
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return [];
 
