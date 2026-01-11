@@ -35,9 +35,7 @@ const Landing = () => {
       {/* Header */}
       <header className="p-6 flex justify-between items-center">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center">
-            <span className="text-xl font-bold text-primary-foreground">R</span>
-          </div>
+          <img src="/logo-mascot.png" alt="Rise of Ledger" className="w-10 h-10 rounded-xl object-cover" />
           <span className="text-xl font-bold gradient-text">Rise of Ledger</span>
         </div>
       </header>
@@ -47,9 +45,11 @@ const Landing = () => {
         <div className="text-center max-w-4xl mx-auto">
           {/* Logo & Title */}
           <div className="mb-8">
-            <div className="w-24 h-24 mx-auto mb-6 rounded-2xl gradient-primary flex items-center justify-center glow-primary">
-              <span className="text-5xl font-bold text-primary-foreground">R</span>
-            </div>
+            <img
+              src="/logo-mascot.png"
+              alt="Rise of Ledger Utopia"
+              className="w-48 h-48 mx-auto mb-6 rounded-2xl object-cover shadow-2xl"
+            />
             <h1 className="text-5xl md:text-6xl font-bold mb-4">
               <span className="gradient-text">Rise of Ledger</span>
               <br />
