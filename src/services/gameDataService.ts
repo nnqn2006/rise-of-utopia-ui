@@ -21,6 +21,12 @@ const getDefaultDemoData = () => ({
             VEG: { amount: 120, cost_basis: 2.3 },
             GRAIN: { amount: 200, cost_basis: 1.9 },
         },
+        pool_state: {
+            'GAO/USDG': { token_reserve: 10000, usdg_reserve: 10000 },
+            'FRUIT/USDG': { token_reserve: 8500, usdg_reserve: 10000 },
+            'VEG/USDG': { token_reserve: 12000, usdg_reserve: 10000 },
+            'GRAIN/USDG': { token_reserve: 9500, usdg_reserve: 10000 },
+        },
         total_trades: 47,
         total_volume: 12500,
         win_rate: 65.5,
